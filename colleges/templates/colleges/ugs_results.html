@@ -1,0 +1,76 @@
+{% extends "colleges/base.html" %}
+{% load dash %}
+{% block title %}UGS results{% endblock %}
+{% block head %}
+<style>
+  #ugs td:first-child, #ugs th:first-child { position:sticky; left:0; background:var(--panel); z-index:1; min-width:240px; }
+  #ugs th:first-child { z-index:3; background:#f1f1ec; }
+  #ugs td.zero { color:#c8c8c2; }
+  #ugs tr.other td:first-child { color:var(--muted); }
+  #ugs tr:target td { background:#fff3c4; }
+  #ugs tfoot td { font-weight:600; background:#f1f1ec; position:sticky; bottom:0; }
+  #ugs th.sep, #ugs td.sep { border-left:2px solid var(--line); }
+</style>
+{% endblock %}
+{% block content %}
+<p class="small"><a href="{% url 'dashboard' %}">← Colleges</a></p>
+<h1>UGS results</h1>
+{% if rows %}
+<p class="muted small">How many UGS students went to each college, per year ({{ years.0 }}-{{ years|last }}), from
+<b>{{ file }}</b>. <b>Average</b> is over all {{ years|length }} years (the "UGS students / year" column on Colleges).
+<b>Capacity</b> is the average of {{ recent.0 }}-{{ recent|last }}, rounded, at least 1; crowding compares it with the
+UGS applicants who have the college on their list now. Grey rows are colleges that are not on our list.</p>
+<div class="toolbar">
+  <input type="search" id="filter" placeholder="Filter colleges…" style="max-width:260px">
+  <label class="small"><input type="checkbox" id="ours"> Only colleges on our list ({{ n_ours }})</label>
+  <span class="small muted">Click a column header to sort.</span>
+</div>
+<div class="tablewrap">
+<table id="ugs">
+<thead><tr>
+  <th data-type="text">College ↕</th>
+  {% for y in years %}<th class="num{% if forloop.first %} sep{% endif %}" data-type="num">{{ y }} ↕</th>{% endfor %}
+  <th class="num sep" data-type="num">Total ↕</th><th class="num" data-type="num">Average / year ↕</th>
+  <th class="num sep" data-type="num" title="Average of {{ recent.0 }}-{{ recent|last }}, rounded, at least 1">Capacity ↕</th>
+  <th class="num" data-type="num" title="Submitted UGS students with the college on their list now">UGS applicants now ↕</th>
+</tr></thead>
+<tbody>
+{% for r in rows %}<tr{% if r.college %} id="c{{ r.college.unitid }}"{% else %} class="other"{% endif %} data-ours="{% if r.college %}1{% endif %}">
+  <td data-v="{{ r.name|lower }}">{% if r.college %}<a href="{% url 'college_detail' r.college.unitid %}">{{ r.name }}</a>{% else %}{{ r.name }} <span class="small">(not on our list)</span>{% endif %}</td>
+  {% for n in r.admits %}<td class="num{% if not n %} zero{% endif %}{% if forloop.first %} sep{% endif %}" data-v="{{ n }}">{{ n }}</td>{% endfor %}
+  <td class="num sep" data-v="{{ r.total }}"><b>{{ r.total }}</b></td>
+  <td class="num" data-v="{{ r.avg }}">{{ r.avg|floatformat:2 }}</td>
+  <td class="num sep" data-v="{{ r.capacity|default_if_none:-1 }}">{{ r.capacity|default_if_none:"" }}</td>
+  <td class="num" data-v="{{ r.applicants|default_if_none:-1 }}">{{ r.applicants|default_if_none:"" }}</td>
+</tr>{% endfor %}
+</tbody>
+<tfoot><tr><td>All colleges</td>{% for n in totals %}<td class="num{% if forloop.first %} sep{% endif %}">{{ n }}</td>{% endfor %}
+  <td class="num sep">{{ grand_total }}</td><td></td><td class="sep"></td><td></td></tr></tfoot>
+</table>
+</div>
+<script>
+  const table = document.getElementById('ugs'), body = table.tBodies[0];
+  const filter = document.getElementById('filter'), ours = document.getElementById('ours');
+  function apply() {
+    const q = filter.value.toLowerCase();
+    [...body.rows].forEach(r => {
+      r.style.display = r.cells[0].textContent.toLowerCase().includes(q) && (!ours.checked || r.dataset.ours) ? '' : 'none';
+    });
+  }
+  filter.addEventListener('input', apply); ours.addEventListener('change', apply);
+  table.tHead.querySelectorAll('th').forEach((th, i) => {
+    let asc = th.dataset.type === 'text';
+    th.style.cursor = 'pointer';
+    th.addEventListener('click', () => {
+      const num = th.dataset.type === 'num';
+      const key = r => num ? parseFloat(r.cells[i].dataset.v) : r.cells[i].dataset.v;
+      [...body.rows].sort((a, b) => (key(a) > key(b) ? 1 : key(a) < key(b) ? -1 : 0) * (asc ? 1 : -1))
+        .forEach(r => body.appendChild(r));
+      asc = !asc;
+    });
+  });
+</script>
+{% else %}
+<p class="muted">No results imported yet: <code>python manage.py import_ugs_history --file "data/UGS 2018-2025 College Admissions results.xlsx"</code></p>
+{% endif %}
+{% endblock %}

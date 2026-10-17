@@ -1,0 +1,6 @@
+{% comment %}Add a college to the student's list, or remove it, from the matches table (works without JavaScript too).{% endcomment %}
+<form method="post" action="{% url 'portal_list_change' %}" class="listform">{% csrf_token %}<input type="hidden" name="college" value="{{ row.r.college_id }}">
+{% if row.choice %}<span class="badge l2" title="Your #{{ row.choice }}">#{{ row.choice }}</span>
+<button class="listbtn remove" name="action" value="remove" title="Remove {{ row.r.college.name }} from your list" aria-label="Remove {{ row.r.college.name }} from your list">Remove</button>
+{% else %}<button class="listbtn add" name="action" value="add" title="Add {{ row.r.college.name }} to the end of your list" aria-label="Add {{ row.r.college.name }} to your list">+ Add</button>{% endif %}
+</form>

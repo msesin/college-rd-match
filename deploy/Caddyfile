@@ -1,0 +1,8 @@
+# /etc/caddy/Caddyfile: use this if nothing else on the server already uses ports 80 and 443.
+# Caddy gets and renews the HTTPS certificate by itself.
+# Replace the address with your domain, or with <server-ip-with-dashes>.sslip.io
+# (e.g. 129-146-10-20.sslip.io for 129.146.10.20) if you have no domain.
+dashboard.example.com {
+    encode gzip
+    reverse_proxy 127.0.0.1:8001
+}

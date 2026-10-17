@@ -1,0 +1,54 @@
+{% load dash l10n %}{% spaceless %}
+{% if source %}<span class="dot {{ source.source }}" title="Source: {{ source_label }} — {{ source.detail }}{% if source.user %} ({{ source.user }}){% endif %}, {{ source.created_at|date:'Y-m-d' }}"></span>{% endif %}
+{% if col.kind == "body" %}
+  {% if p.student_body %}<span class="badge {% if p.student_body != 'coed' %}l2{% endif %}">{{ p.get_student_body_display }}</span>{% else %}<span class="muted">not set</span>{% endif %}
+{% elif col.kind == "det" %}
+  {% if p.det_minimum %}<b>min {{ p.det_minimum|unlocalize }}</b>{% endif %}{% if p.det_minimum and p.det_recommended %} · {% endif %}{% if p.det_recommended %}<b>rec {{ p.det_recommended|unlocalize }}</b>{% endif %}
+  {% if not p.det_minimum and not p.det_recommended %}<span class="muted">no score set</span>{% endif %}
+  {% if p.det_note %}<div class="small muted" title="{{ p.det_note }}">{{ p.det_note|truncatechars:short }}</div>{% endif %}
+{% elif col.kind == "sat" %}
+  {% if p.sat_median %}<b>{{ p.sat_median|unlocalize }}</b>{% else %}<span class="muted">—</span>{% endif %}
+  {% if p.test_policy %} <span class="badge {% if p.test_policy == 'preferred' %}required{% else %}{{ p.test_policy }}{% endif %}">{{ p.get_test_policy_display }}</span>{% endif %}
+  {% if p.sat_p25 and p.sat_p75 %}<div class="small">25th-75th: {{ p.sat_p25|unlocalize }}-{{ p.sat_p75|unlocalize }}</div>{% endif %}
+  {% if p.sat_p30 and p.sat_p70 %}<div class="small"><span title="Bottom 30% (red flag) below the estimated 30th percentile">red flag &lt; {{ p.sat_p30|unlocalize }}</span> · <span title="Top 30% (safety) from the estimated 70th percentile">safety &ge; {{ p.sat_p70|unlocalize }}</span></div>{% endif %}
+  {% if p.sat_minimum %}<div class="small"><b>min {{ p.sat_minimum|unlocalize }}</b></div>{% endif %}
+  {% if p.sat_note %}<div class="small muted" title="{{ p.sat_note }}">{{ p.sat_note|truncatechars:short }}</div>{% endif %}
+{% elif col.kind == "gpa" %}
+  {% if p.gpa_average is not None %}<b>{{ p.gpa_average }}</b>{% else %}<span class="muted">not reported</span>{% endif %}
+  {% if p.gpa_note %}<div class="small muted" title="{{ p.gpa_note }}">{{ p.gpa_note|truncatechars:short }}</div>{% endif %}
+{% elif col.kind == "perf" %}
+  {% if p.top10_pct is None and p.gpa_375_pct is None %}<span class="muted">not reported</span>{% endif %}
+  {% if p.top10_pct is not None %}<span>Top 10% of class: <b>{{ p.top10_pct|floatformat:0 }}%</b></span>{% endif %}{% if p.top10_pct is not None and p.gpa_375_pct is not None %}<br>{% endif %}
+  {% if p.gpa_375_pct is not None %}<span>GPA 3.75+: <b>{{ p.gpa_375_pct|floatformat:0 }}%</b></span>{% endif %}
+{% elif col.kind == "longtext" %}
+  {% with text=p|attr_of:col.fields.0 %}{% if text %}<span title="{{ text }}">{{ text|truncatechars:long }}</span>{% else %}<span class="muted">empty</span>{% endif %}{% endwith %}
+{% elif col.kind == "choice" %}
+  {% with level=p|attr_of:col.fields.0 rationale=p|attr_of:col.fields.1 %}
+  {% if level %}<span class="badge l{{ level|choice_rank }}">{{ p|choice_label:col.fields.0 }}</span>{% else %}<span class="muted">not set</span>{% endif %}
+  {% if rationale %}<div class="small muted" title="{{ rationale }}">{{ rationale|truncatechars:short }}</div>{% endif %}
+  {% endwith %}
+{% elif col.kind == "programs" %}
+  {% for prog in top3 %}<div>{{ forloop.counter }}. {{ prog.name }}</div>{% empty %}<span class="muted">none</span>{% endfor %}
+  {% if top3 %}<div class="small"><a href="{% url 'programs' %}?college={{ college.unitid }}">{{ top3.0.source|upper }} list →</a></div>{% endif %}
+{% elif col.kind == "hubspot" %}
+  {% if hubspot_items %}<div class="hs-notes">{% for r in hubspot_items %}<div class="hs-note"><b>{{ r.title|truncatechars:60 }}</b><br>{{ r.raw_text|default:"(empty)"|linebreaksbr }}</div>{% endfor %}</div>
+  <a href="{% url 'college_detail' college.unitid %}#hubspot" class="small">See details →</a>{% else %}<span class="muted">none</span>{% endif %}
+{% elif col.kind == "applicants" %}
+  {% if applicants %}<b>{{ applicants }}</b> <span class="small muted">student{{ applicants|pluralize }}</span>{% else %}<span class="muted">0</span>{% endif %}
+  {% if p.ugs_capacity %}<div class="small {% if applicants > p.ugs_capacity|mul:4 %}flag{% elif applicants > p.ugs_capacity|mul:2 %}badge l2{% else %}muted{% endif %}">capacity {{ p.ugs_capacity }}/year</div>{% endif %}
+  {% if p.ugs_admits %}<div class="small muted" title="UGS admits by year">{% for year, n in p.ugs_admits|dictsort_items %}{{ year }}: {{ n }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
+{% elif col.kind == "full_rides" %}
+  {% if p.full_rides %}<b>{{ p.full_rides }}</b>{% if p.full_rides_scope %} <span class="badge {% if p.full_rides_scope == 'intl' %}optional{% endif %}">{% if p.full_rides_scope == 'intl' %}international{% else %}all students{% endif %}</span>{% endif %}{% else %}<span class="muted">—</span>{% endif %}
+  {% if p.full_rides_note %}<div class="small muted" title="{{ p.full_rides_note }}">{{ p.full_rides_note|truncatechars:short }}</div>{% endif %}
+  {% if p.full_rides_url %}<div class="small"><a href="{{ p.full_rides_url }}" target="_blank" rel="noopener">source</a></div>{% endif %}
+{% elif col.kind == "ugs_avg" %}
+  {% with avg=p.ugs_admits_avg %}{% if avg %}<a href="{% url 'ugs_results' %}#c{{ college.unitid }}"><b>{{ avg|floatformat:1 }}</b></a>
+  <div class="small muted">{% with n=p.ugs_admits.values|sum_values %}{{ n }} student{{ n|pluralize }} in {{ p.ugs_admits|length }} years{% endwith %}</div>{% elif avg == 0 %}<span class="muted">0</span>{% else %}<span class="muted">—</span>{% endif %}{% endwith %}
+{% elif col.kind == "intl_aid" %}
+  {% if p.intl_aid_total %}<b>${{ p.intl_aid_total|money }}</b>{% if p.intl_aid_students %}<div class="small">to {{ p.intl_aid_students }} international students</div>{% endif %}{% else %}<span class="muted">—</span>{% endif %}
+  {% if p.intl_aid_note %}<div class="small muted" title="{{ p.intl_aid_note }}">{{ p.intl_aid_note|truncatechars:short }}</div>{% endif %}
+{% elif col.kind == "number" %}
+  {% with v=p|attr_of:col.fields.0 %}{% if v is not None %}<b>{{ v }}</b>{% else %}<span class="muted">—</span>{% endif %}{% endwith %}
+  {% if col.fields.1 %}{% with n=p|attr_of:col.fields.1 %}{% if n %}<div class="small muted" title="{{ n }}">{{ n|truncatechars:short }}</div>{% endif %}{% endwith %}{% endif %}
+{% endif %}
+{% endspaceless %}

@@ -1,0 +1,14 @@
+{% extends "colleges/portal/base.html" %}
+{% block title %}Sign up{% endblock %}
+{% block content %}
+<div class="card" style="max-width:480px; margin:30px auto">
+  <h1>Sign up or reset your password</h1>
+  <p class="muted">{% if domains %}Enter your {% for d in domains %}@{{ d }}{% if not forloop.last %} or {% endif %}{% endfor %} email address{% else %}Enter the email address UGS has for you{% endif %}. We will send you a link to set your password.</p>
+  <form method="post">{% csrf_token %}
+    <label for="id_email">{{ form.email.label }}</label>{{ form.email }}{{ form.email.errors }}
+    <div class="helptext">{{ form.email.help_text }}</div>
+    <p style="margin-top:18px"><button class="primary">Send me the link</button></p>
+  </form>
+  <p class="small"><a href="{% url 'login' %}">Back to log in</a></p>
+</div>
+{% endblock %}

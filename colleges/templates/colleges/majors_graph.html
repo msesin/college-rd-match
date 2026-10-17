@@ -1,0 +1,22 @@
+{% extends "colleges/base.html" %}
+{% block title %}Majors graph{% endblock %}
+{% block content %}
+<p class="small"><a href="{% url 'match' %}">← Match</a></p>
+<h1>Majors graph</h1>
+<p class="muted small">How well a strong program in one major serves a student who wants another, from 0 to 1. The
+matching engine compares each student's three majors with each college's top 20 programs through this graph. It is
+written in code (<code>sources/majors.py</code>): 1.0 = the same major under another name, 0.8 = very close,
+0.6 = closely related, 0.4 = related, {{ same_family }} = same family with no closer link. Names not listed are
+placed by key words ("Mechanical Engineering" = Engineering). "Relevant HS subjects" are the high-school subjects used for "relevant coursework". <a href="{% url 'match' %}">Back to Match</a></p>
+{% if unplaced %}<div class="errors">Niche programs that fit no major: {{ unplaced|join:", " }}</div>{% endif %}
+<div class="tablewrap"><table>
+<thead><tr><th>Major</th><th>Family</th><th class="num" title="How many students list it among their 3 majors">Students</th><th>Linked majors</th><th>Also called</th><th>Relevant HS subjects</th></tr></thead>
+<tbody>{% for row in rows %}<tr>
+  <td><b>{{ row.name }}</b></td><td class="small">{{ row.family }}</td>
+  <td class="num">{{ row.students|default:"" }}</td>
+  <td class="small">{% for name, sim in row.links %}<span class="badge {% if sim >= 0.8 %}optional{% elif sim >= 0.5 %}l2{% endif %}">{{ name }} {{ sim|floatformat:1 }}</span> {% empty %}<span class="muted">none</span>{% endfor %}</td>
+  <td class="small muted">{{ row.aliases|join:", " }}</td>
+  <td class="small">{{ row.subjects|join:", " }}</td>
+</tr>{% endfor %}</tbody>
+</table></div>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "colleges/base.html" %}
+{% load dash %}
+{% block title %}Match{% endblock %}
+{% block content %}
+<h1>Match</h1>
+<p class="muted small">The matching engine scores how well each student matches each college: the <b>student match %</b>.
+It is not a chance of admission: a perfect match can still be turned down, especially with a request for full financial
+aid. The preliminary match is computed when a student submits; then the crowding cut (UGS applicants against the
+college's UGS capacity, up to −{{ crowding.cut }}%) is applied from the current lists, so the final match changes live as
+lists change. Students see only the final %, and their {{ top_n }} best matches straight away. {{ n_submitted }} of
+{{ n_students }} students have submitted their form. How it works: docs/algorithm.md.</p>
+<p><a href="{% url 'majors_graph' %}">Majors graph</a> · <a href="{% url 'college_weights' %}">College weights</a></p>
+
+{% if students %}
+<form method="get" class="toolbar">
+  <label>Student <select name="student" onchange="this.form.submit()">{% for st, name in students %}<option value="{{ st.code }}" {% if student and st.pk == student.pk %}selected{% endif %}>{{ name|default:st.code }}</option>{% endfor %}</select></label>
+  {% if run %}<span class="small muted">Updated {{ run.created_at|date:"M j, H:i" }}</span>{% endif %}
+</form>
+
+{% if student %}
+<h2>{{ student_name|default:student.code }} <span class="muted small">{{ student.code }}</span></h2>
+<div class="small" style="margin-bottom:12px">
+  {% if profile_read %}<details><summary><b>Profile rated by {{ profile_model }}</b> <span class="muted">(changed by hand on the Students tab, a rating is kept)</span></summary>
+    <table style="width:auto; margin:4px 0"><tbody>{% for label, level, reason in profile_read %}<tr><td>{{ label }}</td><td><b>{{ level|default:"—" }}</b></td><td class="muted">{{ reason }}</td></tr>{% endfor %}</tbody></table>
+  </details>
+  {% else %}<div class="muted">Profile not rated yet: half points for school type, talent and activities until it is.</div>{% endif %}
+  {% if vibe_read %}<div><b>Self-summary read by {{ vibe_read.model }}:</b> {{ vibe_read.traits|join:", " }}. <span class="muted">Stands out: {{ vibe_read.standout }}</span></div>
+  {% else %}<div class="muted">Self-summary not judged yet: half points for every college.</div>{% endif %}
+  <details><summary class="muted">Points (team default; each college's own points follow its CDS C7, see <a href="{% url 'college_weights' %}">College weights</a>)</summary>
+    <table style="width:auto"><thead><tr><th>Metric</th><th>Category</th><th class="num">Points out of 100</th></tr></thead><tbody>
+    {% for label, cat, pts in points %}<tr><td><span class="cat {{ cat }}"></span>{{ label }}</td><td class="catname {{ cat }}">{{ cat }}</td><td class="num">{{ pts|floatformat:1 }}</td></tr>{% endfor %}
+    <tr><td><b>Preliminary match</b></td><td></td><td class="num"><b>100</b></td></tr>
+    <tr><td class="cat-after"><span class="cat after"></span>UGS applicants</td><td class="catname after">After the match</td><td class="num cat-after">up to −{{ crowding.cut }}%</td></tr>
+    </tbody></table>
+  </details>
+</div>
+
+{% if listed %}
+<h3>The {{ listed|length }} best matches (the student sees these)</h3>
+{% include "colleges/_match_rows.html" with rows=listed %}
+{% endif %}
+{% if others %}
+<details {% if not listed %}open{% endif %}><summary><b>Other colleges ({{ others|length }})</b></summary>
+{% include "colleges/_match_rows.html" with rows=others %}
+</details>
+{% endif %}
+{% if excluded %}
+<details><summary><b>Excluded: a college requirement not met ({{ excluded|length }})</b></summary>
+<div class="tablewrap"><table>
+<thead><tr><th>College</th><th>Reason</th><th>In student's 12</th></tr></thead>
+<tbody>{% for row in excluded %}<tr><td><a href="{% url 'college_detail' row.r.college_id %}">{{ row.r.college.name }}</a></td>
+<td>{{ row.r.details.excluded }}</td><td>{% if row.choice %}<span class="badge l2">choice #{{ row.choice }}</span>{% endif %}</td></tr>{% endfor %}</tbody>
+</table></div>
+</details>
+{% endif %}
+{% endif %}
+{% else %}
+<p class="muted">No results yet: they appear when students submit their forms. For the sample students, run
+<code>python manage.py run_matching --sample</code>.</p>
+{% endif %}
+{% endblock %}

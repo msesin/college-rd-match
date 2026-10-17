@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="{{ csrf_token }}">
+<title>{% block title %}UGS colleges{% endblock %}</title>
+<style>
+  :root { --bg:#f7f7f4; --panel:#fff; --ink:#1d2433; --muted:#667085; --line:#e4e4e0; --accent:#1f5fbf;
+          --warn:#b54708; --warnbg:#fff6e8; --ok:#0e7a5f;
+          --src-cds:#1f5fbf; --src-ipeds:#0e7a5f; --src-hubspot:#c2410c; --src-official_site:#6d28d9;
+          --src-ai:#be185d; --src-manual:#111827; --src-niche:#0369a1; --src-ugs:#ca8a04; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--ink); }
+  header { background:var(--panel); border-bottom:1px solid var(--line); padding:10px 20px; display:flex; gap:20px; align-items:center; flex-wrap:wrap; }
+  header b { font-size:15px; }
+  header nav a { margin-right:14px; color:var(--ink); text-decoration:none; }
+  header nav a.on { color:var(--accent); font-weight:600; }
+  main { padding:16px 20px 40px; }
+  .usermenu { margin-left:auto; position:relative; cursor:default; padding:4px 0; }
+  .usermenu-items { display:none; position:absolute; right:0; top:100%; background:var(--panel); border:1px solid var(--line);
+                    border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12); min-width:140px; z-index:20; padding:4px 0; }
+  .usermenu:hover .usermenu-items, .usermenu:focus-within .usermenu-items { display:block; }
+  .usermenu-items a { display:block; padding:6px 14px; color:var(--ink); text-decoration:none; }
+  .usermenu-items a:hover { background:#f4f7fd; }
+  a { color:var(--accent); }
+  h1 { font-size:20px; margin:0 0 4px; } h2 { font-size:16px; margin:24px 0 8px; } h3 { font-size:14px; margin:14px 0 6px; }
+  .muted { color:var(--muted); } .small { font-size:12px; }
+  .toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:10px 0; }
+  input[type=text], input[type=number], input[type=url], select, textarea { padding:6px 8px; border:1px solid var(--line); border-radius:6px; font:inherit; background:#fff; }
+  textarea { width:100%; }
+  button, .btn { padding:6px 12px; border:1px solid var(--ink); background:var(--ink); color:#fff; border-radius:6px; font:inherit; cursor:pointer; text-decoration:none; display:inline-block; }
+  button.secondary, .btn.secondary { background:#fff; color:var(--ink); }
+  button.danger { background:#fff; color:#b42318; border-color:#b42318; }
+  .tablewrap { overflow:auto; border:1px solid var(--line); background:var(--panel); border-radius:8px; max-height:calc(100vh - 170px); }
+  table { border-collapse:separate; border-spacing:0; width:100%; }
+  th, td { padding:7px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+  th { background:#f1f1ec; font-weight:600; position:sticky; top:0; z-index:2; }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .badge { margin-left:4px; display:inline-block; font-size:12px; padding:1px 7px; border-radius:999px; background:#eef2f7; color:var(--ink); white-space:nowrap; }
+  .badge.required { background:#fde8e8; color:#9b1c1c; } .badge.optional { background:#e7f5ee; color:#0e7a5f; } .badge.blind { background:#ede9fe; color:#5b21b6; }
+  th.center, td.center { text-align:center; }
+  .badge.l3 { background:#fde8e8; color:#9b1c1c; } .badge.l2 { background:#fef3c7; color:#92400e; } .badge.l1 { background:#e7f5ee; color:#0e7a5f; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; vertical-align:middle; background:#9ca3af; }
+  {% for key in sources %}.dot.{{ key }} { background:var(--src-{{ key }}); }{% endfor %}
+  pre { white-space:pre-wrap; background:var(--panel); border:1px solid var(--line); padding:12px; border-radius:8px; max-height:500px; overflow:auto; font-size:12px; }
+  dialog { border:1px solid var(--line); border-radius:10px; padding:0; width:min(640px, 94vw); box-shadow:0 20px 50px rgba(0,0,0,.2); }
+  dialog::backdrop { background:rgba(15,23,42,.35); }
+  dialog .body { padding:18px 20px; max-height:80vh; overflow:auto; }
+  dialog h3 { margin-top:0; font-size:16px; }
+  dialog .field { margin:10px 0; } dialog label { display:block; font-weight:600; margin-bottom:3px; }
+  dialog .helptext { color:var(--muted); font-size:12px; }
+  dialog .errorlist { color:#b42318; margin:4px 0; padding-left:18px; }
+  dialog .actions { display:flex; gap:8px; margin-top:14px; }
+  .legend { display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:var(--muted); }
+  .hs-notes { max-height:240px; overflow:auto; font-size:12px; margin-bottom:4px; }
+  .hs-note { padding:4px 0; border-bottom:1px dotted var(--line); }
+  /* metric categories: academic, personal, fit; "after" = crowding, applied after the match */
+  :root { --cat-Academic:#1f5fbf; --catbg-Academic:#e8f0fc; --cat-Personal:#7c3aed; --catbg-Personal:#f3eefe;
+          --cat-Fit:#0e7a5f; --catbg-Fit:#e7f5ee; --cat-after:#b54708; --catbg-after:#fff6e8; }
+  .cat { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:baseline; }
+  .cat.Academic { background:var(--cat-Academic); } .cat.Personal { background:var(--cat-Personal); }
+  .cat.Fit { background:var(--cat-Fit); } .cat.after { background:none; border:2px dashed var(--cat-after); width:11px; height:11px; }
+  th.cat-Academic { border-top:3px solid var(--cat-Academic); } th.cat-Personal { border-top:3px solid var(--cat-Personal); }
+  th.cat-Fit { border-top:3px solid var(--cat-Fit); } th.cat-after { border-top:3px dashed var(--cat-after); background:var(--catbg-after); }
+  td.cat-after { background:var(--catbg-after); }
+  .catname { font-weight:600; } .catname.Academic { color:var(--cat-Academic); } .catname.Personal { color:var(--cat-Personal); }
+  .catname.Fit { color:var(--cat-Fit); } .catname.after { color:var(--cat-after); }
+  .flash { animation: flash 1.2s ease-out; } @keyframes flash { from { background:#fff3c4; } to { background:transparent; } }
+</style>
+{% block head %}{% endblock %}
+</head>
+<body>
+<header>
+  <b>UGS colleges</b>
+  <nav>
+    <a href="{% url 'dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' or request.resolver_match.url_name == 'ugs_results' or request.resolver_match.url_name == 'programs' or request.resolver_match.url_name == 'programs_list' %}on{% endif %}">Colleges</a>
+    <a href="{% url 'students' %}" class="{% if request.resolver_match.url_name == 'students' or request.resolver_match.url_name == 'student_detail' %}on{% endif %}">Students</a>
+    <a href="{% url 'match' %}" class="{% if request.resolver_match.url_name == 'match' or request.resolver_match.url_name == 'college_weights' or request.resolver_match.url_name == 'majors_graph' %}on{% endif %}">Match</a>
+  </nav>
+  <div class="usermenu" tabindex="0">
+    <span class="muted">{{ request.user.get_username }} ▾</span>
+    <div class="usermenu-items"><a href="/admin/">Admin</a></div>
+  </div>
+  <form method="post" action="{% url 'logout' %}" style="display:inline">{% csrf_token %}<button class="secondary" style="padding:3px 10px">Log out</button></form>
+</header>
+<main>{% block content %}{% endblock %}</main>
+
+<dialog id="edit-dialog"><div class="body"></div></dialog>
+<script>
+// Shared editing: load a form into the dialog, post it, and hand the JSON reply to a callback.
+const csrftoken = document.querySelector('meta[name=csrf-token]').content;
+const dialog = document.getElementById('edit-dialog');
+const dialogBody = dialog.querySelector('.body');
+
+function bindForm(url, onSaved) {
+  const form = dialogBody.querySelector('form');
+  if (!form) return;
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const resp = await fetch(url, { method: 'POST', body: new FormData(form), headers: { 'X-CSRFToken': csrftoken } });
+    if (resp.ok) {
+      const data = await resp.json();
+      dialog.close();
+      if (data.reload) { location.reload(); return; }
+      onSaved(data);
+    } else {
+      dialogBody.innerHTML = await resp.text();   // form with validation errors
+      bindForm(url, onSaved);
+    }
+  });
+  dialogBody.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => dialog.close()));
+  dialogBody.querySelectorAll('[data-delete]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('Delete this row?')) return;
+    const r = await fetch(b.dataset.delete, { method: 'POST', headers: { 'X-CSRFToken': csrftoken } });
+    if (r.ok) location.reload();
+  }));
+}
+
+async function openForm(url, onSaved) {
+  const resp = await fetch(url);
+  dialogBody.innerHTML = await resp.text();
+  dialog.showModal();
+  bindForm(url, onSaved);
+  const first = dialogBody.querySelector('input:not([type=hidden]), select, textarea');
+  if (first) first.focus();
+}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

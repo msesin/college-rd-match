@@ -1,0 +1,121 @@
+{% extends "colleges/portal/base.html" %}
+{% load dash %}
+{% block title %}My matches{% endblock %}
+{% block wrapclass %}wide{% endblock %}
+{% block bannerclass %}wide{% endblock %}
+{% block content %}
+<h1>{% if name %}Hi, {{ name }}{% else %}Your matches{% endif %}</h1>
+{% include "colleges/portal/_tabs.html" with active="matches" %}
+
+{% if submitted %}<div class="notice">Thank you! Your application is submitted, and here are your matches. You can still change
+your college list on the <a href="{% url 'portal' %}">My application</a> tab.</div>{% endif %}
+{% if pending %}<div class="notice">We are still reading your achievements and your description of yourself. Refresh this page
+in a minute or two: your matches will update.</div>{% endif %}
+
+<p class="muted">The match % shows how well your grades, tests, interests and personality fit what each college looks for.
+It is not your chance of admission: even a 100% match can be turned down, especially when you ask for full financial aid.
+"UGS applicants" is how many UGS students have the college on their list: when many more UGS students apply to a college
+than it usually admits, the match goes down for all of them (by up to a fifth), so it changes as lists change. This
+page updates by itself. Your counselor
+will go through this with you.</p>
+
+{% if rows %}
+<div class="toolbar">
+  <h2 style="margin:0">Your matches</h2>
+  <div class="segmented" role="group" aria-label="Which colleges">
+    <button type="button" data-show="all" class="on">All colleges ({{ rows|length }})</button>
+    <button type="button" data-show="mine">Only my list ({{ n_mine }})</button>
+  </div>
+  <span class="small muted">Click a column name to sort; click again to reverse. Add or remove colleges in the "My list"
+  column ({{ n_list }} of {{ max_list }} on your list).</span>
+</div>
+<div class="errors" id="list-error"{% if not error %} hidden{% endif %}>{{ error }}</div>
+{% include "colleges/portal/_match_table.html" %}
+{% endif %}
+{% if excluded %}
+<details><summary><b>Excluded: a college requirement not met (<span id="n-excluded">{{ excluded|length }}</span>)</b></summary>
+<div class="card" style="padding:8px; overflow-x:auto"><table class="results" id="excluded">
+<thead><tr><th>College</th><th>Why</th><th class="center">My list</th><th class="center">UGS applicants</th></tr></thead>
+<tbody>{% for row in excluded %}<tr data-mine="{% if row.choice %}1{% endif %}"><td><b>{{ row.r.college.name }}</b></td><td>{{ row.r.details.excluded }}</td>
+<td class="center">{% include "colleges/portal/_list_button.html" %}</td><td class="center">{{ row.applicants }}</td></tr>{% endfor %}</tbody>
+</table></div>
+</details>
+{% endif %}
+<script>
+  // Sort: click a column name (again to reverse). Filter: all colleges or only the student's list. Both work together
+  // and are kept when the page reloads itself.
+  const KEY = 'matches-view';
+  let view = {show: 'all', col: 0, dir: 1};
+  try { view = {...view, ...JSON.parse(sessionStorage.getItem(KEY) || '{}')}; } catch (e) {}
+  const table = document.getElementById('matches');
+  function render() {
+    if (table) {
+      const ths = [...table.tHead.rows[0].cells];
+      const num = ths[view.col].dataset.sort === 'num';
+      const key = r => num ? parseFloat(r.cells[view.col].dataset.v) : r.cells[view.col].dataset.v;
+      [...table.tBodies[0].rows].sort((a, b) => (key(a) > key(b) ? 1 : key(a) < key(b) ? -1 : 0) * view.dir)
+        .forEach(r => table.tBodies[0].appendChild(r));
+      ths.forEach((th, i) => { const a = th.querySelector('.arrow'); if (a) a.textContent = i === view.col ? (view.dir > 0 ? ' ▲' : ' ▼') : ' ↕'; });
+    }
+    let shown = 0;
+    document.querySelectorAll('#matches tbody tr, #excluded tbody tr').forEach(r => {
+      r.hidden = view.show === 'mine' && !r.dataset.mine;
+      if (!r.hidden && r.closest('#matches')) shown++;
+    });
+    const none = document.getElementById('none-mine'); if (none) none.hidden = shown > 0;
+    const ex = document.getElementById('n-excluded');
+    if (ex) ex.textContent = document.querySelectorAll('#excluded tbody tr:not([hidden])').length;
+    document.querySelectorAll('[data-show]').forEach(b => b.classList.toggle('on', b.dataset.show === view.show));
+    try { sessionStorage.setItem(KEY, JSON.stringify(view)); } catch (e) {}
+  }
+  if (table) table.tHead.querySelectorAll('th[data-sort]').forEach(th => {
+    th.style.cursor = 'pointer';
+    th.addEventListener('click', () => {
+      const i = th.cellIndex;
+      view = {...view, dir: view.col === i ? -view.dir : (i === 2 || i === 7 ? -1 : 1), col: i};  // match, UGS / year: highest first
+      render();
+    });
+  });
+  document.querySelectorAll('[data-show]').forEach(b => b.addEventListener('click', () => { view.show = b.dataset.show; render(); }));
+  render();
+
+  // Add / remove from the table: send it, then reload (the UGS applicant counts and matches change); the sort, the
+  // filter, the open sections and the scroll position stay.
+  document.querySelectorAll('form.listform').forEach(form => form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const button = e.submitter, data = new FormData(form);
+    data.set('action', button.value);
+    form.querySelectorAll('button').forEach(b => b.disabled = true);
+    button.textContent = '…';
+    try {
+      // getAttribute: form.action would be the button named "action", not the URL
+      const r = await fetch(form.getAttribute('action'), {method: 'POST', body: data, headers: {'Accept': 'application/json'}});
+      const out = await r.json();
+      if (out.ok) { keepOpenSections(); location.reload(); return; }
+      const box = document.getElementById('list-error');
+      box.textContent = out.error; box.hidden = false; box.scrollIntoView({block: 'center', behavior: 'smooth'});
+    } catch (err) {   // no answer: send the form the plain way, with the button's choice
+      const choice = document.createElement('input');
+      choice.type = 'hidden'; choice.name = 'action'; choice.value = button.value;
+      form.appendChild(choice); form.submit(); return;
+    }
+    form.querySelectorAll('button').forEach(b => b.disabled = false);
+    button.textContent = button.value === 'add' ? '+ Add' : 'Remove';
+  }));
+
+  // Live: other students' lists change the matches. Check every 20 seconds and reload when anything changed.
+  // Sections the student opened stay open after the reload.
+  const state = "{{ state|escapejs }}", sections = [...document.querySelectorAll('details')];
+  try { JSON.parse(sessionStorage.getItem('open-sections') || '[]').forEach(i => sections[i] && (sections[i].open = true)); } catch (e) {}
+  function keepOpenSections() {
+    try { sessionStorage.setItem('open-sections', JSON.stringify(sections.map((d, i) => d.open ? i : -1).filter(i => i >= 0))); } catch (e) {}
+  }
+  setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      const r = await fetch("{% url 'portal_matches_state' %}", {headers: {"Accept": "application/json"}});
+      if (r.ok && (await r.json()).state !== state) { keepOpenSections(); location.reload(); }
+    } catch (e) {}
+  }, 20000);
+</script>
+{% endblock %}

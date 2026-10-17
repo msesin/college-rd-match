@@ -1,0 +1,15 @@
+{% extends "colleges/portal/base.html" %}
+{% block title %}Log in{% endblock %}
+{% block content %}
+<div class="card" style="max-width:420px; margin:30px auto">
+  <h1>Log in</h1>
+  {% if form.errors %}<div class="errors">Your username and password didn't match. Please try again.</div>{% endif %}
+  <form method="post">{% csrf_token %}
+    <label for="id_username">Username</label>{{ form.username }}
+    <label for="id_password">Password</label>{{ form.password }}
+    <input type="hidden" name="next" value="{{ next }}">
+    <p style="margin-top:18px"><button class="primary">Log in</button></p>
+  </form>
+  <p class="small muted">First time here, or forgot your password? <a href="{% url 'register' %}">Get a sign-in link by email</a>.</p>
+</div>
+{% endblock %}

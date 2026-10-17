@@ -1,0 +1,10 @@
+{% comment %}One answer on the review form: the saved value with an Edit button; the input opens on Edit
+(it is always part of the form, so unchanged answers are submitted as they are).{% endcomment %}
+<div class="field{% if f.open %} editing{% endif %}"{% if f.empty %} data-empty="1"{% endif %}>
+  <div class="field-head">
+    <label for="{{ f.bf.id_for_label }}">{{ f.bf.label }}{% if f.required %} <span class="req" title="Needed to submit">*</span>{% endif %}</label>
+    {% if not f.open or not f.empty %}<button type="button" class="edit" data-edit>Edit</button>{% endif %}
+  </div>
+  <div class="field-value">{% if f.empty %}<span class="muted">Not given</span>{% elif f.grades %}<table class="grades">{% for subject, grade in f.grades %}<tr><td>{{ subject }}</td><td><b>{{ grade }}</b></td></tr>{% endfor %}</table>{% else %}{{ f.shown|linebreaksbr }}{% endif %}</div>
+  <div class="field-input">{{ f.bf }}{% if f.bf.help_text %}<div class="helptext">{{ f.bf.help_text }}</div>{% endif %}{% if help %}<div class="helptext">{{ help }}</div>{% endif %}{% for e in f.bf.errors %}<div class="errorlist">{{ e }}</div>{% endfor %}</div>
+</div>

@@ -1,0 +1,163 @@
+{% extends "colleges/base.html" %}
+{% load dash %}
+{% block title %}College weights{% endblock %}
+{% block head %}
+<style>
+  #weights th, #weights td { white-space:nowrap; }
+  #weights th.sep, #weights td.sep { border-left:2px solid var(--line); }
+  #weights th.gap, #weights td.gap { border-left:14px solid var(--bg); }
+  .flow-bar { display:flex; align-items:center; gap:12px; margin:14px 0 8px; }
+  .flow-bar h2 { margin:0; }
+  .flow { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 14px 10px; }
+  .flow svg { width:100%; height:auto; display:block; font:12px -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .flow-head { font-size:12px; font-weight:600; fill:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .edge { fill:none; stroke-width:1.6; opacity:.55; transition:opacity .15s; }
+  .edge.Academic { stroke:var(--cat-Academic); } .edge.Personal { stroke:var(--cat-Personal); } .edge.Fit { stroke:var(--cat-Fit); }
+  .edge.prelim { stroke:#667085; } .edge.after { stroke:var(--cat-after); stroke-dasharray:5 4; }
+  .edge.rules { stroke:#b42318; stroke-dasharray:3 4; opacity:.4; }
+  .fnode { cursor:pointer; transition:opacity .15s; }
+  .fnode rect { fill:#fff; stroke:#d0d5dd; stroke-width:1.2; }
+  .fnode .t { font-weight:600; fill:var(--ink); } .fnode .s { fill:var(--muted); font-size:11px; }
+  .fnode.input rect { fill:#f8f8f5; }
+  .fnode.rule rect { stroke:#b42318; stroke-dasharray:4 3; } .fnode.rule .s { fill:#b42318; }
+  .fnode.Academic rect { fill:var(--catbg-Academic); stroke:var(--cat-Academic); }
+  .fnode.Personal rect { fill:var(--catbg-Personal); stroke:var(--cat-Personal); }
+  .fnode.Fit rect { fill:var(--catbg-Fit); stroke:var(--cat-Fit); }
+  .fnode.rules rect { fill:#fdecea; stroke:#b42318; stroke-dasharray:4 3; }
+  .fnode.prelim rect { fill:#eef2f7; stroke:#667085; }
+  .fnode.after rect { fill:var(--catbg-after); stroke:var(--cat-after); stroke-dasharray:5 4; }
+  .fnode:hover rect, .fnode:focus rect, .fnode.on rect { stroke-width:2.4; }
+  .flow.focus .edge { opacity:.06; } .flow.focus .fnode { opacity:.3; }
+  .flow.focus .edge.lit { opacity:.95; stroke-width:2.2; } .flow.focus .fnode.lit { opacity:1; }
+  .flow-help { font-size:13px; color:var(--muted); min-height:38px; margin-top:8px; padding:8px 10px; background:#f8f8f5; border-radius:6px; }
+  .flow-help b { color:var(--ink); }
+</style>
+{% endblock %}
+{% block content %}
+<p class="small"><a href="{% url 'match' %}">← Match</a></p>
+<h1>College weights</h1>
+<div class="flow-bar">
+  <h2>How the match is built</h2>
+  <button type="button" class="secondary" id="flow-toggle" aria-expanded="false" aria-controls="flow-wrap">Show the map ▾</button>
+</div>
+<div id="flow-wrap" hidden>
+<p class="muted small">Click a box to see what it includes and how it is measured.</p>
+<div class="flow">
+  <svg viewBox="-2 -26 {{ flow.width|add:4 }} {{ flow.height|add:28 }}" role="img" aria-label="From the student's answers to the final match">
+    {% for label, col in flow.headers %}{% if label %}<text class="flow-head" x="{{ col.0 }}" y="-10">{{ label }}</text>{% endif %}{% endfor %}
+    <g class="edges">{% for e in flow.edges %}<path d="{{ e.d }}" class="edge {{ e.cls }}" data-a="{{ e.a }}" data-b="{{ e.b }}"/>{% endfor %}</g>
+    {% for n in flow.nodes %}<g class="fnode {{ n.cls }}{% if n.rule %} rule{% endif %}" data-id="{{ n.id }}" data-help="{{ n.help }}" data-title="{{ n.title }}" tabindex="0">
+      <rect x="{{ n.x }}" y="{{ n.y }}" width="{{ n.w }}" height="{{ n.h }}" rx="8"/>
+      <text x="{{ n.x|add:10 }}" y="{% if n.sub %}{{ n.y|add:17 }}{% else %}{{ n.y|add:24 }}{% endif %}" class="t">{% if n.ai %}✦ {% endif %}{{ n.title }}</text>
+      {% if n.sub %}<text x="{{ n.x|add:10 }}" y="{{ n.y|add:32 }}" class="s">{{ n.sub }}</text>{% endif %}
+    </g>{% endfor %}
+  </svg>
+  <div class="flow-help" id="flow-help"><b>✦</b> = rated by Gemini from the student's own text. Hard rules
+  (red dashed boxes; the college is excluded before any points). Dashed orange: applied after the match.</div>
+</div>
+</div>
+
+<h2>Points per college</h2>
+<p class="muted small">Each C7 rating scales the team's points ({% for name, m in multipliers %}{{ name }} x{{ m|num }}{% if not forloop.last %}, {% endif %}{% endfor %};
+blank = important); majors are fixed, so every row adds up to 100. Hover a cell for its C7 rating. Colleges without a CDS
+C7 use the defaults.</p>
+<div class="legend" style="margin:8px 0; font-size:13px; color:var(--ink)">
+  {% for name, pts in chunks %}<span><span class="cat {{ name }}"></span><span class="catname {{ name }}">{{ name }}</span> ({{ pts|floatformat:1 }} by default)</span>{% endfor %}
+  <span><span class="cat after"></span><span class="catname after">After the match</span>: UGS applicants, a cut of up to {{ crowding.cut }}%</span>
+</div>
+
+<div class="toolbar">
+  <input type="search" id="filter" placeholder="Filter colleges…" style="max-width:280px">
+  <span class="small muted">Click a column header to sort.</span>
+</div>
+<div class="tablewrap">
+<table id="weights">
+<thead><tr>
+  <th data-type="text">College ↕</th>
+  {% for name, pts in chunks %}<th class="center cat-{{ name }}{% if forloop.first %} sep{% endif %}" data-type="num" title="{{ name }} metrics together; default {{ pts|floatformat:1 }}"><span class="cat {{ name }}"></span>{{ name }} ↕</th>{% endfor %}
+  {% for label, pts, cat in metrics %}<th class="center cat-{{ cat }}{% if forloop.first %} sep{% endif %}" data-type="num" title="{{ cat }} metric; default {{ pts|floatformat:2 }}"><span class="cat {{ cat }}"></span>{{ label }} ↕<div class="small muted">default {{ pts|floatformat:1 }}</div></th>{% endfor %}
+  <th class="center cat-after gap" data-type="num" title="Not part of the points: applied to the match afterwards">
+    <span class="cat after"></span>UGS applicants ↕<div class="small muted">after the match</div></th>
+</tr></thead>
+<tbody>
+{% for row in rows %}<tr>
+  <td title="{{ row.source }}"><a href="{% url 'college_detail' row.college.unitid %}">{{ row.college.name }}</a></td>
+  {% for name, c in row.chunks %}<td class="center{% if forloop.first %} sep{% endif %}" data-v="{{ c }}"><b class="catname {{ name }}">{{ c|floatformat:1 }}</b></td>{% endfor %}
+  {% for c in row.cells %}<td class="center{% if forloop.first %} sep{% endif %}" data-v="{{ c.points }}" title="{{ c.why }}"{% if c.diff == "more" %} style="background:#e7f5ee"{% elif c.diff == "less" %} style="background:#fdf1e7"{% endif %}>{{ c.points|floatformat:1 }}</td>{% endfor %}
+  <td class="center cat-after gap" data-v="{{ row.cut }}" title="{{ row.applicants }} UGS student{{ row.applicants|pluralize }} have it on their list; UGS capacity {{ row.capacity }} a year">
+    {{ row.applicants }} / {{ row.capacity }}<div class="small">{% if row.cut %}<b>−{{ row.cut|floatformat:"-1" }}%</b>{% else %}<span class="muted">no cut</span>{% endif %}</div></td>
+</tr>{% endfor %}
+</tbody>
+</table>
+</div>
+<p class="small muted">Green: more points than the default; orange: fewer.
+<b class="catname after">UGS applicants</b> is not one of the points: after the preliminary match is computed, it is cut
+when many UGS students have the college on their list compared with its UGS capacity (how many UGS students it usually
+admits a year): no cut up to {{ crowding.free }}x capacity, then a cut that grows evenly to {{ crowding.cut }}% of the
+match at {{ crowding.full }}x and above. Shown as applicants / capacity, with today's cut.</p>
+<script>
+  // Show / hide the map: hidden by default; the choice is remembered in this browser.
+  (() => {
+    const wrap = document.getElementById('flow-wrap'), button = document.getElementById('flow-toggle');
+    function set(open) {
+      wrap.hidden = !open;
+      button.textContent = open ? 'Hide the map ▴' : 'Show the map ▾';
+      button.setAttribute('aria-expanded', open);
+    }
+    let open = false;
+    try { open = localStorage.getItem('weights-map') === 'open'; } catch (e) {}
+    set(open);
+    button.addEventListener('click', () => {
+      open = wrap.hidden;
+      set(open);
+      try { localStorage.setItem('weights-map', open ? 'open' : 'closed'); } catch (e) {}
+    });
+  })();
+
+  // The map: clicking a box lights it, its direct links and the boxes they reach, and shows what it includes.
+  (() => {
+    const flow = document.querySelector('.flow'), help = document.getElementById('flow-help'), first = help.innerHTML;
+    const edges = [...flow.querySelectorAll('.edge')], nodes = [...flow.querySelectorAll('.fnode')];
+    let current = null;
+    function show(id) {
+      current = id;
+      flow.classList.toggle('focus', !!id);
+      nodes.forEach(n => n.classList.remove('lit', 'on'));
+      edges.forEach(e => e.classList.remove('lit'));
+      if (!id) { help.innerHTML = first; return; }
+      // downstream and upstream from the box, so the whole path through it is visible
+      const lit = new Set([id]);
+      const walk = (start, from, to) => { const todo = [start]; while (todo.length) { const x = todo.pop();
+        edges.forEach(e => { if (e.dataset[from] === x) { e.classList.add('lit'); if (!lit.has(e.dataset[to])) { lit.add(e.dataset[to]); todo.push(e.dataset[to]); } } }); } };
+      walk(id, 'a', 'b'); walk(id, 'b', 'a');
+      nodes.forEach(n => { if (lit.has(n.dataset.id)) n.classList.add('lit'); if (n.dataset.id === id) n.classList.add('on'); });
+      const n = nodes.find(n => n.dataset.id === id);
+      help.innerHTML = '<b></b>: <span></span>';
+      help.querySelector('b').textContent = n.dataset.title;
+      help.querySelector('span').textContent = n.dataset.help;
+    }
+    nodes.forEach(n => {
+      n.addEventListener('click', e => { e.stopPropagation(); show(current === n.dataset.id ? null : n.dataset.id); });
+      n.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); show(current === n.dataset.id ? null : n.dataset.id); } });
+    });
+    flow.addEventListener('click', () => show(null));
+  })();
+
+  const table = document.getElementById('weights'), body = table.tBodies[0];
+  document.getElementById('filter').addEventListener('input', e => {
+    const q = e.target.value.toLowerCase();
+    [...body.rows].forEach(r => { r.style.display = r.cells[0].textContent.toLowerCase().includes(q) ? '' : 'none'; });
+  });
+  table.querySelectorAll('th').forEach((th, i) => {
+    let asc = true;
+    th.style.cursor = 'pointer';
+    th.addEventListener('click', () => {
+      const num = th.dataset.type === 'num';
+      const key = r => num ? parseFloat(r.cells[i].dataset.v) : r.cells[i].textContent.trim().toLowerCase();
+      [...body.rows].sort((a, b) => (key(a) > key(b) ? 1 : key(a) < key(b) ? -1 : 0) * (asc ? 1 : -1))
+        .forEach(r => body.appendChild(r));
+      asc = !asc;
+    });
+  });
+</script>
+{% endblock %}

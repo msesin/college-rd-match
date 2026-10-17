@@ -1,0 +1,15 @@
+{% extends "colleges/base.html" %}
+{% block title %}{{ record.title }}{% endblock %}
+{% block content %}
+<p>{% if record.college %}<a href="{% url 'college_detail' record.college_id %}">&larr; {{ record.college.name }}</a>{% endif %}</p>
+<h1>{{ record.title|default:record.external_id }}</h1>
+<p class="muted">{{ record.source|upper }} · {{ record.kind }} · {{ record.period }} · parsed by {{ record.parse_method|default:"-" }} · status {{ record.parse_status|default:"-" }} · fetched {{ record.fetched_at|date:"Y-m-d H:i" }}
+{% if record.file_path %} · <a href="{% url 'record_file' record.pk %}" target="_blank">open original file</a>{% endif %}</p>
+{% if record.parse_log %}<h2>Parse log</h2><pre>{{ record.parse_log }}</pre>{% endif %}
+<h2>Structured values ({{ facts|length }})</h2>
+<div class="tablewrap" style="max-height:400px"><table><thead><tr><th>Section</th><th>Item</th><th class="num">Value</th><th>Key</th></tr></thead><tbody>
+{% for f in facts %}<tr><td>{{ f.section }}</td><td>{{ f.label }}{% if f.needs_review %} <span class="flag">{{ f.review_note }}</span>{% endif %}</td><td class="num">{{ f.display_value }}</td><td class="key">{{ f.key|truncatechars:60 }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if record.raw_text %}<h2>Raw text</h2><pre>{{ record.raw_text|truncatechars:200000 }}</pre>{% endif %}
+{% if record.raw_json %}<h2>Raw data</h2><pre>{{ record.raw_json|pprint|truncatechars:100000 }}</pre>{% endif %}
+{% endblock %}

@@ -1,0 +1,4 @@
+<nav class="tabs">
+  <a href="{% url 'portal' %}" class="{% if active == 'application' %}on{% endif %}">My application</a>
+  {% if has_results or active == "matches" %}<a href="{% url 'portal_matches' %}" class="{% if active == 'matches' %}on{% endif %}">My matches</a>{% endif %}
+</nav>

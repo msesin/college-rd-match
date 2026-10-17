@@ -1,0 +1,18 @@
+# /etc/systemd/system/ugs.service
+# Replace ubuntu with your server user (opc on Oracle Linux) and fix the paths if you used another folder.
+[Unit]
+Description=UGS college dashboard (gunicorn)
+After=network.target
+
+[Service]
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/ugs-rd-matching
+# Port 8001 is only reachable from the server itself; the web server (Caddy/nginx) passes requests to it.
+# If your other project already uses 8001, pick another port here and in the Caddy/nginx file.
+ExecStart=/home/ubuntu/ugs-rd-matching/.venv/bin/gunicorn config.wsgi:application --bind 127.0.0.1:8001 --workers 2 --timeout 120
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

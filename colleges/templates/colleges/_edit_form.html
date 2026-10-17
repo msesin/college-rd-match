@@ -1,0 +1,31 @@
+{% load dash %}<h3>{{ title }}</h3>
+{% if help %}<p class="muted small">{{ help }}</p>{% endif %}
+<form method="post" action="{{ action }}">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  {% for field in form %}
+  <div class="field">
+    {% if field.field.widget.input_type == "checkbox" %}
+      <label>{{ field }} {{ field.label }}</label>
+    {% else %}
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+    {% endif %}
+    {% if field.help_text %}<div class="helptext">{{ field.help_text }}</div>{% endif %}
+    {{ field.errors }}
+  </div>
+  {% endfor %}
+  <div class="actions">
+    <button type="submit">Save</button>
+    <button type="button" class="secondary" data-close>Cancel</button>
+    {% if delete_url %}<button type="button" class="danger" data-delete="{{ delete_url }}" style="margin-left:auto">Delete</button>{% endif %}
+  </div>
+</form>
+{% if history %}
+<h3 style="margin-top:18px">Where these values came from</h3>
+<table class="small">
+  {% for h in history %}<tr>
+    <td style="white-space:nowrap"><span class="dot {{ h.source }}"></span>{{ sources|get_item:h.source|default:h.source }}</td>
+    <td><b>{{ h.field }}</b>: {{ h.value|truncatechars:120 }}<div class="muted">{{ h.detail|truncatechars:200 }}{% if h.user %} · {{ h.user }}{% endif %} · {{ h.created_at|date:"Y-m-d H:i" }}</div></td>
+  </tr>{% endfor %}
+</table>
+{% endif %}

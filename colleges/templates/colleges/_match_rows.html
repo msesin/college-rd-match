@@ -1,0 +1,31 @@
+{% load dash %}<div class="tablewrap">
+<table>
+<thead><tr><th class="num">#</th><th>College</th><th class="center" title="Final match: the preliminary match after the crowding cut. Students see this">Match</th><th class="center cat-after" title="Preliminary match (points), and the cut for UGS applicants against the college's UGS capacity"><span class="cat after"></span>Before cut</th><th>Why</th><th class="center" title="Share of international applicants admitted (CDS C1), for context; not part of the match. In brackets: the overall admit rate, when the college publishes no international figure">Intl admit rate</th><th class="center" title="Full rides as a reliable source states them; hover for the details and who is counted">Full rides</th><th class="center">On student's list</th><th class="center">UGS applicants</th></tr></thead>
+<tbody>
+{% for row in rows %}{% with d=row.r.details %}
+<tr>
+  <td class="num">{{ row.rank }}</td>
+  <td><a href="{% url 'college_detail' row.r.college_id %}">{{ row.r.college.name }}</a>
+    {% if d.advice %} <span class="badge" title="{{ d.advice }}">don't send SAT</span>{% endif %}
+    {% if d.metrics %}<details class="small"><summary class="muted">why</summary>
+      <table style="width:auto; margin:4px 0">
+      <thead><tr><th>Metric</th><th>Level</th><th class="num">Points</th><th class="num">of</th><th>Reason</th></tr></thead>
+      <tbody>{% for m in d.metrics %}<tr><td><span class="cat {{ m.category }}"></span>{{ m.label }}</td><td>{{ m.level }}</td><td class="num">{{ m.points|num }}</td><td class="num">{{ m.share|num }}</td><td>{{ m.note }}</td></tr>{% endfor %}
+      <tr><td><b>Preliminary match</b></td><td></td><td class="num"><b>{{ row.prelim|floatformat:1 }}</b></td><td class="num">100</td><td></td></tr>
+      <tr><td class="cat-after"><span class="cat after"></span>UGS applicants</td><td>{{ row.applicants }} / capacity {{ row.capacity }}</td><td class="num">{% if row.cut %}−{{ row.cut|floatformat:"-1" }}%{% else %}no cut{% endif %}</td><td></td><td></td></tr>
+      <tr><td><b>Final match</b></td><td></td><td class="num"><b>{{ row.final|floatformat:1 }}</b></td><td></td><td></td></tr>
+      </tbody></table>
+      {% if d.advice %}<div><b>{{ d.advice }}</b></div>{% endif %}
+    </details>{% endif %}
+  </td>
+  <td class="center"><b>{{ row.final|floatformat:1 }}%</b></td>
+  <td class="center cat-after small">{{ row.prelim|floatformat:1 }}%{% if row.cut %}<div><b>−{{ row.cut|floatformat:"-1" }}%</b></div>{% endif %}</td>
+  <td class="small">{{ d.why }}</td>
+  <td class="center">{% if d.intl_admit_rate is not None %}{{ d.intl_admit_rate|floatformat:1 }}%{% elif d.overall_admit_rate is not None %}<span class="muted" title="Overall admit rate; no international figure">({{ d.overall_admit_rate|floatformat:0 }}% overall)</span>{% endif %}</td>
+  <td class="center">{% if row.profile.full_rides %}<span title="{{ row.profile.full_rides_note }}">{{ row.profile.full_rides }}</span>{% if row.profile.full_rides_scope %}<div class="small muted">{% if row.profile.full_rides_scope == 'intl' %}international{% else %}all students{% endif %}</div>{% endif %}{% if row.profile.full_rides_url %} <a class="small" href="{{ row.profile.full_rides_url }}" target="_blank" rel="noopener">source</a>{% endif %}{% else %}<span class="muted" title="{{ row.profile.full_rides_note }}">—</span>{% endif %}</td>
+  <td class="center">{% if row.choice %}<span class="badge l2">choice #{{ row.choice }}</span>{% endif %}</td>
+  <td class="center">{{ row.applicants }}</td>
+</tr>{% endwith %}{% endfor %}
+</tbody>
+</table>
+</div>

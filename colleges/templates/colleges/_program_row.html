@@ -1,0 +1,9 @@
+<tr data-edit="{% url 'program_edit' p.pk %}" class="editable">
+  <td><a href="{% url 'college_detail' p.college_id %}">{{ p.college.name }}</a></td>
+  <td class="num">{{ p.position }}</td>
+  <td><b>{{ p.name }}</b></td>
+  <td>{{ p.ranking }}{% if p.source_url %} <a href="{{ p.source_url }}" target="_blank" rel="noopener" class="small">source</a>{% endif %}</td>
+  <td><span class="dot {{ p.source }}"></span>{{ p.source }}</td>
+  <td class="num">{{ p.graduates|default_if_none:"" }}</td>
+  <td class="small muted">{% if p.updated_by %}edited by {{ p.updated_by }}{% endif %}</td>
+</tr>

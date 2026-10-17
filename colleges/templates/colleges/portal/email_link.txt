@@ -1,0 +1,10 @@
+Hello,
+
+{% if existing %}You asked to reset your password for UGS College Counseling. Your username is {{ username }}.
+Choose a new password here:{% else %}Welcome to UGS College Counseling. Click the link below to set your password and open your profile:{% endif %}
+
+{{ link }}
+
+The link works for {{ hours }} hours and only once. If you did not ask for it, you can ignore this email.
+
+UGS College Counseling

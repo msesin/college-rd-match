@@ -1,0 +1,55 @@
+{% extends "colleges/base.html" %}{% load dash %}
+{% block title %}{{ college.name }}{% endblock %}
+{% block head %}<style> .profile td.editable { cursor:pointer; } .profile td.editable:hover { background:#f4f7fd; } .profile th { position:static; width:220px; } </style>{% endblock %}
+{% block content %}
+<p><a href="{% url 'dashboard' %}">&larr; All colleges</a></p>
+<h1>{{ college.name }}</h1>
+<p class="muted">UNITID {{ college.unitid }} · {{ college.city }}, {{ college.state }}{% if college.website %} · <a href="https://{{ college.website|cut:'https://' }}" target="_blank" rel="noopener">{{ college.website }}</a>{% endif %}{% if college.hubspot_company_ids %} · HubSpot company {{ college.hubspot_company_ids|join:", " }}{% endif %}</p>
+
+<h2>Profile</h2>
+<div class="tablewrap" style="max-height:none"><table class="profile">
+{% for c in cells %}<tr>
+  <th title="{{ c.setting.description }}">{{ c.setting.label }}{% if not c.setting.visible %} <span class="muted small">(hidden on dashboard)</span>{% endif %}</th>
+  <td class="{% if c.col.fields %}editable{% endif %}"{% if c.col.fields %} data-edit="{% url 'cell_edit' college.unitid c.col.key %}?full=1"{% endif %}>{{ c.html|safe }}</td>
+</tr>{% endfor %}
+</table></div>
+
+<h2>Programs ({{ programs|length }} in the list used for Top 3)</h2>
+<ol>{% for p in programs %}<li>{{ p.name }} <span class="muted small">{{ p.ranking }}</span></li>{% empty %}<li class="muted">None</li>{% endfor %}</ol>
+<p class="small"><a href="{% url 'programs' %}?college={{ college.unitid }}">Edit programs →</a></p>
+
+<h2 id="hubspot">HubSpot calls and notes ({{ hubspot|length }})</h2>
+{% for r in hubspot %}
+<h3>{{ r.title }}</h3>
+<pre>{{ r.raw_text|default:"(empty)" }}</pre>
+{% empty %}<p class="muted">No HubSpot calls or notes for this college.</p>{% endfor %}
+
+<h2>AI answers ({{ ai_answers|length }})</h2>
+<p class="muted small">Each answer comes from one stand-alone request with no project context. HubSpot text is included only after removing sentences that may name people; the model is asked to fact-check it and answer mainly from its own knowledge (see notes_check). The exact prompt sent is shown.</p>
+{% for a in ai_answers %}
+<details><summary><b>{{ a.question }}</b> · {{ a.model }} · {{ a.created_at|date:"Y-m-d H:i" }} · {{ a.notes_used }} HubSpot excerpt{{ a.notes_used|pluralize }}</summary>
+<h3>Prompt sent</h3><pre>{{ a.prompt }}</pre>
+<h3>Answer</h3><pre>{% if a.response.parsed %}{% for k, v in a.response.parsed.items %}{{ k }}: {{ v }}
+{% endfor %}{% else %}{{ a.response.text }}{% endif %}</pre>
+</details>
+{% empty %}<p class="muted">None yet. Run <code>python manage.py generate_college_answers</code> after adding ANTHROPIC_API_KEY to .env.</p>{% endfor %}
+
+<h2>Value history</h2>
+<div class="tablewrap" style="max-height:420px"><table class="small">
+<thead><tr><th>When</th><th>Field</th><th>Value</th><th>Source</th><th>Detail</th></tr></thead>
+{% for h in history %}<tr><td style="white-space:nowrap">{{ h.created_at|date:"Y-m-d H:i" }}</td><td>{{ h.field }}</td><td>{{ h.value|truncatechars:100 }}</td>
+<td style="white-space:nowrap"><span class="dot {{ h.source }}"></span>{{ sources|get_item:h.source|default:h.source }}{% if h.user %} · {{ h.user }}{% endif %}</td><td class="muted">{{ h.detail|truncatechars:160 }}</td></tr>{% endfor %}
+</table></div>
+
+<h2>CDS documents</h2>
+<ul>{% for d in documents %}<li><a href="{% url 'record_detail' d.pk %}">{{ d.title }}</a> · parsed by {{ d.parse_method }} · {{ d.parse_status }}{% if d.file_path %} · <a href="{% url 'record_file' d.pk %}" target="_blank">PDF/Excel</a>{% endif %}</li>{% empty %}<li class="muted">No CDS (IPEDS data only).</li>{% endfor %}</ul>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelector('.profile').addEventListener('click', (e) => {
+  const td = e.target.closest('td.editable');
+  if (!td || e.target.closest('a')) return;
+  openForm(td.dataset.edit, (data) => { td.innerHTML = data.html; td.classList.remove('flash'); void td.offsetWidth; td.classList.add('flash'); });
+});
+</script>
+{% endblock %}

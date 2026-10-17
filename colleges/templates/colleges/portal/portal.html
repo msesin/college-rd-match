@@ -1,0 +1,211 @@
+{% extends "colleges/portal/base.html" %}
+{% load dash %}
+{% block title %}My profile{% endblock %}
+{% block content %}
+<h1>{% if name %}Hi, {{ name }}{% else %}Your profile{% endif %}</h1>
+{% include "colleges/portal/_tabs.html" with active="application" %}
+
+{% if student.submitted_at %}
+  {% if saved == "list" %}<div class="notice">Your college list is saved, and your matches are updated.</div>{% endif %}
+  {% if errors %}<div class="errors"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+  <div class="card">
+    <h2>Your college list</h2>
+    <p class="muted small">Keep this list up to date as you decide: add the colleges you will apply to (up to {{ n_choices }}),
+    remove the ones you won't, and use the arrows to change the order (most wanted first). UGS college counseling
+    recommends {{ n_recommended }} colleges: finish those applications first, then add more. UGS counselors see how many
+    students apply to each college, and your matches update when you save.</p>
+    <form method="post" id="list-form">{% csrf_token %}
+      <input type="hidden" name="action" value="save_list"><input type="hidden" name="n_rows" id="n_rows" value="{{ my_list|length }}">
+      <div id="list-rows">
+      {% for college in my_list %}
+        <div class="list-row">
+          <div class="list-row-head"><span class="list-rank">{{ forloop.counter }}.</span>
+            <select name="college_{{ forloop.counter }}"><option value="">— choose a college —</option>
+              {% for col in colleges %}<option value="{{ col.unitid }}" {% if college.unitid == col.unitid %}selected{% endif %}>{{ col.name }}</option>{% endfor %}
+            </select>
+            <button type="button" class="edit" data-up title="Move up">▲</button><button type="button" class="edit" data-down title="Move down">▼</button><button type="button" class="edit" data-remove title="Remove">✕</button>
+          </div>
+        </div>
+      {% endfor %}
+      </div>
+      <template id="row-template">
+        <div class="list-row">
+          <div class="list-row-head"><span class="list-rank"></span>
+            <select><option value="">— choose a college —</option>{% for col in colleges %}<option value="{{ col.unitid }}">{{ col.name }}</option>{% endfor %}</select>
+            <button type="button" class="edit" data-up title="Move up">▲</button><button type="button" class="edit" data-down title="Move down">▼</button><button type="button" class="edit" data-remove title="Remove">✕</button>
+          </div>
+        </div>
+      </template>
+      <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap">
+        <button type="button" class="secondary" id="add-row">+ Add a college</button>
+        <span class="small muted" id="row-limit" hidden>You have {{ n_choices }} colleges, the most a list can have.</span>
+        <button class="primary">Save my list</button>
+      </div>
+    </form>
+  </div>
+  <div class="card">
+    <h2>What you submitted</h2>
+    <p class="muted small">Submitted on {{ student.submitted_at|date:"F j, Y" }}. Need to change something here? Contact your UGS counselor.</p>
+    <p><b>Pronouns:</b> {{ student.get_pronouns_display }} · <b>School:</b> {{ student.school_name|default:"—" }} · <b>DET:</b> {{ student.det_score|default:"—" }} · <b>SAT:</b> {{ student.sat_score|default:"—" }}</p>
+    <p><b>Grades:</b> {% if student.gpa %}GPA {{ student.gpa }}{% endif %} {{ student.gpa_note }}{% if student.class_top_pct %} · top {{ student.class_top_pct|floatformat:"-1" }}% of class{% endif %}</p>
+    {% if student.subject_grades %}<p><b>By subject:</b> {{ student.subject_grades|grades_text }}</p>{% endif %}
+    <p><b>Majors:</b> {{ student.major_1 }}{% if student.major_2 %}, {{ student.major_2 }}{% endif %}{% if student.major_3 %}, {{ student.major_3 }}{% endif %} · <b>IB/AP/A-levels:</b> {{ student.get_curriculum_display }}</p>
+    <p><b>Awards and olympiads:</b> {{ student.academic_note|linebreaksbr|default:"—" }}</p>
+    <p><b>Activities:</b> {{ student.activities|linebreaksbr|default:"—" }}</p>
+    <p><b>Work experience:</b> {{ student.work_experience|linebreaksbr|default:"—" }}</p>
+    <p><b>About you:</b> {{ student.self_summary|linebreaksbr }}</p>
+    <p><b>Files:</b> {% for f in files %}<a href="{% url 'portal_file' f.pk %}" target="_blank">{{ f.original_name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+  </div>
+  <script>
+    // The list: add, remove and move rows; names follow the order, so the order is the ranking.
+    const rows = document.getElementById('list-rows');
+    function renumber() {
+      [...rows.children].forEach((row, i) => {
+        row.querySelector('.list-rank').textContent = (i + 1) + '.';
+        row.querySelector('select').name = 'college_' + (i + 1);
+      });
+      document.getElementById('n_rows').value = rows.children.length;
+      const full = rows.children.length >= {{ n_choices }};
+      document.getElementById('add-row').disabled = full;
+      document.getElementById('row-limit').hidden = !full;
+    }
+    rows.addEventListener('click', e => {
+      const row = e.target.closest('.list-row');
+      if (!row) return;
+      if (e.target.matches('[data-remove]')) row.remove();
+      if (e.target.matches('[data-up]') && row.previousElementSibling) rows.insertBefore(row, row.previousElementSibling);
+      if (e.target.matches('[data-down]') && row.nextElementSibling) rows.insertBefore(row.nextElementSibling, row);
+      renumber();
+    });
+    renumber();
+    document.getElementById('add-row').addEventListener('click', () => {
+      if (rows.children.length >= {{ n_choices }}) return;
+      rows.appendChild(document.getElementById('row-template').content.firstElementChild.cloneNode(true));
+      renumber();
+      rows.lastElementChild.querySelector('select').focus();
+    });
+  </script>
+{% else %}
+
+{% if saved == "draft" %}<div class="notice">Saved. You can come back and finish later.</div>{% endif %}
+{% if errors or form.errors %}<div class="errors"><b>Please check the form:</b><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}
+  {% for field in form %}{% for e in field.errors %}<li>{{ field.label }}: {{ e }}</li>{% endfor %}{% endfor %}</ul></div>{% endif %}
+
+<p class="muted">We filled in what UGS has on file. Check each answer and press <b>Edit</b> to change it. When everything is
+right, press <b>Submit</b> at the bottom; you can submit without changing anything. After that, the form is locked.
+<span class="req">*</span> needed to submit.</p>
+
+<form method="post" enctype="multipart/form-data">{% csrf_token %}
+<div class="card">
+  <h2>1. About you</h2>
+  {% include "colleges/portal/_field.html" with f=fields.pronouns %}
+  {% include "colleges/portal/_field.html" with f=fields.school_name %}
+</div>
+
+<div class="card">
+  <h2>2. English and tests</h2>
+  {% include "colleges/portal/_field.html" with f=fields.det_score help="Not needed if your school teaches in English (IB, AP or A-levels)." %}
+  {% include "colleges/portal/_field.html" with f=fields.sat_score %}
+</div>
+
+<div class="card">
+  <h2>3. Grades and transcript</h2>
+  {% include "colleges/portal/_field.html" with f=fields.curriculum help='Choose "No" if your school follows the Ukrainian national curriculum.' %}
+  {% include "colleges/portal/_field.html" with f=fields.subject_grades %}
+  {% include "colleges/portal/_field.html" with f=fields.gpa %}
+  {% include "colleges/portal/_field.html" with f=fields.gpa_note %}
+  {% include "colleges/portal/_field.html" with f=fields.class_top_pct %}
+  {% include "colleges/portal/_field.html" with f=fields.transcript_note %}
+  <div class="field{% if not files %} editing{% endif %}"{% if not files %} data-empty="1"{% endif %}>
+    <div class="field-head"><label for="id_transcripts">Transcript files <span class="req" title="Needed to submit">*</span></label>
+      {% if files %}<button type="button" class="edit" data-edit>Edit</button>{% endif %}</div>
+    <div class="field-value">{% for f in files %}<a href="{% url 'portal_file' f.pk %}" target="_blank">{{ f.original_name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</div>
+    <div class="field-input">
+      {% demo_user as is_demo %}{% if is_demo %}
+      <div class="helptext">Uploads are turned off in the demo; it already has a sample transcript.</div>
+      {% else %}
+      {% if files %}<ul class="small">{% for f in files %}<li><a href="{% url 'portal_file' f.pk %}" target="_blank">{{ f.original_name }}</a>
+        <button type="submit" form="del-{{ f.pk }}" style="border:none; background:none; color:#b42318; cursor:pointer">remove</button></li>{% endfor %}</ul>{% endif %}
+      <input type="file" id="id_transcripts" name="transcripts" multiple accept=".png,.jpg,.jpeg,.pdf,.heic,.webp">
+      <div class="helptext">Photos or scans of all your school years (PNG, JPG, HEIC or PDF, up to {{ max_mb }} MB each). You can upload several files.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>4. What you want to study</h2>
+  {% include "colleges/portal/_field.html" with f=fields.major_1 %}
+  {% include "colleges/portal/_field.html" with f=fields.major_2 %}
+  {% include "colleges/portal/_field.html" with f=fields.major_3 %}
+</div>
+
+<div class="card">
+  <h2>5. Your achievements, activities and work</h2>
+  {% include "colleges/portal/_field.html" with f=fields.academic_note %}
+  {% include "colleges/portal/_field.html" with f=fields.activities %}
+  {% include "colleges/portal/_field.html" with f=fields.work_experience %}
+</div>
+
+<div class="card">
+  <h2>6. About you, in your words</h2>
+  {% include "colleges/portal/_field.html" with f=fields.self_summary %}
+  <div class="helptext"><span id="wc"></span></div>
+</div>
+
+<div class="card">
+  <h2>7. Your colleges</h2>
+  <p class="muted small">The colleges you would like to apply to, most wanted first: at least {{ n_minimum }}, up to
+  {{ n_choices }}. <b>UGS college counseling recommends choosing {{ n_recommended }}</b> and adding more once you have finished
+  those applications. This is your starting list: after you submit, you see your matches and can change the list at any time.</p>
+  {% for c in choice_edit %}
+  {% if c.rank == n_recommended|add:1 %}<details{% if more_open %} open{% endif %}>
+  <summary class="small"><b>More colleges (optional, up to {{ n_choices }})</b></summary>{% endif %}
+  <div class="field{% if c.open %} editing{% endif %}"{% if not c.college %} data-empty="1"{% endif %}>
+    <div class="field-head"><label for="college_{{ c.rank }}">{{ c.rank }}. {% if c.college %}{{ c.college.name }}{% else %}<span class="muted">not chosen yet</span>{% endif %}</label>
+      {% if c.college %}<button type="button" class="edit" data-edit>Edit</button>{% endif %}</div>
+    <div class="field-input">
+      <select name="college_{{ c.rank }}" id="college_{{ c.rank }}"><option value="">— choose a college —</option>
+        {% for col in colleges %}<option value="{{ col.unitid }}" {% if c.college and c.college.unitid == col.unitid %}selected{% endif %}>{{ col.name }}</option>{% endfor %}
+      </select>
+    </div>
+  </div>
+  {% if forloop.last and choice_edit|length > n_recommended %}</details>{% endif %}
+  {% endfor %}
+</div>
+
+<div class="card" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
+  <button class="primary" name="action" value="submit" onclick="return confirm('Submit your form? You will not be able to change it afterwards.')">Submit</button>
+  <button class="secondary" name="action" value="save">Save changes and finish later</button>
+</div>
+</form>
+{% for f in files %}<form id="del-{{ f.pk }}" method="post" action="{% url 'portal_file_delete' f.pk %}">{% csrf_token %}</form>{% endfor %}
+<script>
+  // Edit opens an answer; Cancel closes it again and puts back the saved answer.
+  document.querySelectorAll('[data-edit]').forEach(btn => {
+    const box = btn.closest('.field');
+    const label = () => { btn.textContent = box.classList.contains('editing') ? 'Cancel' : (box.dataset.empty ? 'Add' : 'Edit'); };
+    btn.addEventListener('click', () => {
+      if (box.classList.contains('editing')) {
+        box.querySelectorAll('input, textarea, select').forEach(el => {
+          if (el.type === 'file') el.value = '';
+          else if (el.tagName === 'SELECT') [...el.options].forEach(o => { o.selected = o.defaultSelected; });
+          else el.value = el.defaultValue;
+        });
+        box.classList.remove('editing');
+      } else {
+        box.classList.add('editing');
+        const first = box.querySelector('input, textarea, select');
+        if (first) first.focus();
+      }
+      label();
+      count();
+    });
+    label();
+  });
+  const ta = document.getElementById('{{ form.self_summary.id_for_label }}'), wc = document.getElementById('wc');
+  function count() { const n = (ta.value.match(/\b\w[\w'’-]*\b/g) || []).length; wc.textContent = `${n}/300 words`; wc.style.color = n > 300 ? '#b42318' : ''; }
+  ta.addEventListener('input', count); count();
+</script>
+{% endif %}
+{% endblock %}

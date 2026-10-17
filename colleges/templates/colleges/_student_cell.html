@@ -1,0 +1,26 @@
+{% load dash l10n %}{% spaceless %}
+{% if col.kind == "s_choice" %}
+  {% with v=s|attr_of:col.fields.0 %}{% if v %}<span class="badge">{{ s|choice_label:col.fields.0 }}</span>{% else %}<span class="muted">—</span>{% endif %}{% endwith %}
+{% elif col.kind == "s_number" %}
+  {% with v=s|attr_of:col.fields.0 %}{% if v is not None %}<b>{{ v|unlocalize }}</b>{% else %}<span class="muted">—</span>{% endif %}{% endwith %}
+{% elif col.kind == "s_gpa" %}
+  {% with t=s|transcript_levels %}{% if t.gpa.0 %}<div><span class="badge {% if t.gpa.0 == 'top' %}optional{% elif t.gpa.0 == 'maybe' %}l2{% else %}required{% endif %}" title="{{ t.gpa.1 }}">{% if t.gpa.0 == 'top' %}Will get in{% elif t.gpa.0 == 'maybe' %}Maybe{% else %}Red flags{% endif %}</span></div>
+  <div class="small muted">{{ t.gpa.1 }}</div>{% else %}<span class="muted">no grades</span>{% endif %}{% endwith %}
+  {% if s.gpa is not None %}<div class="small">GPA {{ s.gpa }}/4</div>{% endif %}
+  {% if s.subject_grades %}<div class="small" title="{{ s.subject_grades|grades_text }}">{{ s.subject_grades|grades_text|truncatechars:short }}</div>{% endif %}
+{% elif col.kind == "s_perf" %}
+  {% with t=s|transcript_levels %}
+  <div>{% if t.rank.0 %}<span class="badge {% if t.rank.0 == 'top' %}optional{% elif t.rank.0 == 'middle' %}l2{% else %}required{% endif %}">{{ t.rank.1 }}</span>{% else %}<span class="muted">no class rank</span>{% endif %}</div>
+  <div class="small">Relevant coursework: {% if t.coursework.0 %}<b>{{ t.coursework.0 }}</b> <span class="muted">{{ t.coursework.1 }}</span>{% else %}<span class="muted">{{ t.coursework.1 }}</span>{% endif %}</div>
+  {% endwith %}
+  {% if s.transcript_note %}<div class="small muted" title="{{ s.transcript_note }}">{{ s.transcript_note|truncatechars:short }}</div>{% endif %}
+{% elif col.kind == "s_majors" %}
+  {% if s.major_1 %}<div>1. {{ s.major_1 }}</div>{% endif %}{% if s.major_2 %}<div>2. {{ s.major_2 }}</div>{% endif %}{% if s.major_3 %}<div>3. {{ s.major_3 }}</div>{% endif %}
+  {% if not s.major_1 and not s.major_2 and not s.major_3 %}<span class="muted">—</span>{% endif %}
+{% elif col.kind == "s_rated" %}
+  {% for r in ratings %}<div>{% if ratings|length > 1 %}<span class="small">{{ r.label }}:</span> {% endif %}{% if r.value %}<span class="badge l{% if r.value == 'very_strong' or r.value == 'high' or r.value == 'english' %}3{% elif r.value == 'strong' or r.value == 'medium' or r.value == 'top_ua' %}2{% else %}1{% endif %}">{{ r.display }}</span>{% if r.note %} <span class="small muted" title="{{ r.note }}">{{ r.note|truncatechars:short }}</span>{% endif %}{% else %}<span class="muted small">not rated yet</span>{% endif %}</div>{% endfor %}
+  {% with t=s|attr_of:col.fields.0 %}{% if t %}<div class="small" title="{{ t }}">{{ t|truncatechars:short }}</div>{% else %}<div class="small muted">empty</div>{% endif %}{% endwith %}
+{% elif col.kind == "s_text" %}
+  {% with t=s|attr_of:col.fields.0 %}{% if t %}<span title="{{ t }}">{{ t|truncatechars:long }}</span>{% else %}<span class="muted">empty</span>{% endif %}{% endwith %}
+{% endif %}
+{% endspaceless %}

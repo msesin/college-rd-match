@@ -1,0 +1,73 @@
+{% extends "colleges/base.html" %}
+{% block title %}Students{% endblock %}
+{% block head %}
+<style>
+  #sgrid td:first-child, #sgrid th:first-child { position:sticky; left:0; background:var(--panel); z-index:1; min-width:190px; }
+  #sgrid th:first-child { z-index:3; background:#f1f1ec; }
+  #sgrid td { min-width:120px; max-width:320px; }
+  #sgrid td.wide { min-width:280px; }
+  #sgrid td.editable { cursor:pointer; } #sgrid td.editable:hover { background:#f4f7fd; }
+  th .sort { border:none; background:none; color:var(--muted); padding:0 0 0 4px; cursor:pointer; font-size:12px; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>Students</h1>
+<p class="muted small">One row per applicant; the columns mirror the college dashboard, in the same order. Click a cell to edit it, or a name to change it.
+Names are stored encrypted and are never sent to AI models: only the student's code and these data points are.</p>
+<div class="toolbar">
+  <a href="#" class="btn" data-open="{% url 'student_add' %}">+ Add a student</a>
+  <input type="text" id="search" placeholder="Filter students…" size="24">
+  <span class="muted small">{{ rows|length }} students</span>
+</div>
+<div class="tablewrap">
+<table id="sgrid">
+<thead><tr>
+  <th>Name <button class="sort" data-col="0">↕</button></th>
+  {% for c in columns %}<th title="{{ c.description }}">{{ c.label }} <button class="sort" data-col="{{ forloop.counter }}">↕</button></th>{% endfor %}
+  <th title="The 12 colleges the student chose in the form, with their reasons">College choices</th>
+</tr></thead>
+<tbody>
+{% for r in rows %}<tr>
+  <td data-sort="{{ r.name|lower }}"><a href="{% url 'student_detail' r.s.code %}"><b>{{ r.name|default:"(no name)" }}</b></a>
+    <div class="small muted">{{ r.s.code }}{% if r.s.cohort %} · {{ r.s.cohort }}{% endif %}{% if r.s.n_files %} · {{ r.s.n_files }} file{{ r.s.n_files|pluralize }}{% endif %}
+    · <a href="#" data-open="{% url 'student_name_edit' r.s.code %}">rename</a>
+    · <form method="post" action="{% url 'student_delete' r.s.code %}" style="display:inline" onsubmit="return confirm('Delete {{ r.name|default:r.s.code|escapejs }} for good? This removes their profile, files, college choices and login.')">{% csrf_token %}<button style="background:none; border:none; color:#b42318; cursor:pointer; padding:0; font:inherit">delete</button></form></div>
+    <div class="small">{% if r.s.submitted_at %}<span class="badge optional">Submitted {{ r.s.submitted_at|date:"M j" }}</span>{% elif r.s.user %}<span class="badge">Signed up, not submitted</span>{% else %}<span class="badge muted">No account yet</span>{% endif %}
+    {% if r.s.user %}<span class="muted">@{{ r.s.user.username }}</span>{% endif %}</div></td>
+  {% for c in r.cells %}<td class="editable{% if c.col.kind == 's_text' or c.col.kind == 's_rated' %} wide{% endif %}" data-sort="{{ c.sort }}" data-edit="{% url 'student_cell_edit' r.s.code c.col.key %}">{{ c.html|safe }}</td>{% endfor %}
+  <td class="wide" data-sort="{{ r.choices|length }}">{% if r.choices %}<div class="hs-notes">{% for ch in r.choices %}<div class="hs-note"><b>{{ ch.rank }}. {{ ch.college.name }}</b>{% if ch.blurb %}<br>{{ ch.blurb }}{% endif %}</div>{% endfor %}</div>{% else %}<span class="muted">none yet</span>{% endif %}</td>
+</tr>{% empty %}<tr><td colspan="{{ columns|length|add:2 }}" class="muted">No students yet. Use "+ Add a student".</td></tr>{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const grid = document.getElementById('sgrid');
+grid.addEventListener('click', (e) => {
+  const td = e.target.closest('td.editable');
+  if (!td || e.target.closest('a')) return;
+  openForm(td.dataset.edit, (data) => { td.innerHTML = data.html; td.dataset.sort = data.sort;
+    td.classList.remove('flash'); void td.offsetWidth; td.classList.add('flash'); });
+});
+document.querySelectorAll('[data-open]').forEach(a => a.addEventListener('click', (e) => {
+  e.preventDefault(); openForm(a.dataset.open, () => location.reload());
+}));
+let sortState = { col: null, dir: 1 };
+grid.querySelectorAll('th .sort').forEach(btn => btn.addEventListener('click', () => {
+  const col = +btn.dataset.col;
+  sortState = { col, dir: sortState.col === col ? -sortState.dir : (col === 0 ? 1 : -1) };
+  const body = grid.tBodies[0];
+  [...body.rows].sort((a, b) => {
+    const x = a.cells[col].dataset.sort, y = b.cells[col].dataset.sort;
+    if (x === '' && y === '') return 0; if (x === '') return 1; if (y === '') return -1;
+    const nx = parseFloat(x), ny = parseFloat(y);
+    return ((!isNaN(nx) && !isNaN(ny)) ? nx - ny : x.localeCompare(y)) * sortState.dir;
+  }).forEach(r => body.appendChild(r));
+}));
+document.getElementById('search').addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase();
+  [...grid.tBodies[0].rows].forEach(r => { r.style.display = r.cells[0].textContent.toLowerCase().includes(q) ? '' : 'none'; });
+});
+</script>
+{% endblock %}

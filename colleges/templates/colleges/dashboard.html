@@ -1,0 +1,123 @@
+{% extends "colleges/base.html" %}{% load dash %}
+{% block title %}Colleges{% endblock %}
+{% block head %}
+<style>
+  #grid td:first-child, #grid th:first-child { position:sticky; left:0; background:var(--panel); z-index:1; min-width:190px; }
+  #grid th:first-child { z-index:3; background:#f1f1ec; }
+  #grid td.editable { cursor:pointer; }
+  #grid td.editable:hover { background:#f4f7fd; }
+  #grid td { min-width:140px; max-width:340px; }
+  #grid td.wide { min-width:300px; }
+  th .label { cursor:pointer; border-bottom:1px dashed #9ca3af; }
+  th .sort { border:none; background:none; color:var(--muted); padding:0 0 0 4px; cursor:pointer; font-size:12px; }
+  th .sort.on { color:var(--accent); }
+  th[draggable] .grip { cursor:grab; color:var(--muted); margin-right:4px; }
+  th.drop-left { box-shadow: inset 3px 0 0 var(--accent); } th.drop-right { box-shadow: inset -3px 0 0 var(--accent); }
+</style>
+{% endblock %}
+{% block content %}
+<h1>Colleges</h1>
+<p class="muted small">Click a cell to edit it. Click a column name to rename, describe or hide the column; drag a column header (⠿) to move it. Changes are saved on the server for everyone. The dot in a cell shows where its value came from (hover for details).
+Each college's ranked programs are on the <a href="{% url 'programs' %}">Programs</a> page; UGS students admitted per
+college and year are on the <a href="{% url 'ugs_results' %}">UGS results</a> page.</p>
+<div class="toolbar">
+  <input type="text" id="search" placeholder="Filter colleges…" size="28">
+  <span class="muted small" id="count">{{ rows|length }} colleges</span>
+  {% if hidden %}<span class="small">Hidden columns:
+    {% for s in hidden %}<a href="#" data-column="{% url 'column_edit' s.key %}">{{ s.label }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+  <span class="legend" style="margin-left:auto">{% for key, label in sources.items %}<span><span class="dot {{ key }}"></span>{{ label }}</span>{% endfor %}</span>
+</div>
+<div class="tablewrap">
+<table id="grid">
+<thead><tr>
+  <th>College <button class="sort" data-col="0" title="Sort">↕</button></th>
+  {% for col, s in columns %}<th title="{{ s.description }}" draggable="true" data-key="{{ col.key }}"><span class="grip" title="Drag to move the column">⠿</span><span class="label" data-column="{% url 'column_edit' col.key %}">{{ s.label }}</span><button class="sort" data-col="{{ forloop.counter }}" title="Sort">↕</button></th>{% endfor %}
+</tr></thead>
+<tbody>
+{% for r in rows %}<tr>
+  <td data-sort="{{ r.college.name|lower }}"><a href="{% url 'college_detail' r.college.unitid %}"><b>{{ r.college.name }}</b></a><div class="small muted">{{ r.college.city }}, {{ r.college.state }}</div></td>
+  {% for c in r.cells %}<td class="{% if c.col.fields %}editable{% endif %}{% if c.col.kind == 'longtext' or c.col.kind == 'hubspot' %} wide{% endif %}" data-sort="{{ c.sort }}"{% if c.col.fields %} data-edit="{% url 'cell_edit' r.college.unitid c.col.key %}"{% endif %}>{{ c.html|safe }}</td>{% endfor %}
+</tr>{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const grid = document.getElementById('grid');
+
+grid.addEventListener('click', (e) => {
+  const td = e.target.closest('td.editable');
+  if (!td || e.target.closest('a')) return;
+  openForm(td.dataset.edit, (data) => {
+    td.innerHTML = data.html;
+    td.dataset.sort = data.sort;
+    td.classList.remove('flash'); void td.offsetWidth; td.classList.add('flash');
+  });
+});
+
+document.querySelectorAll('[data-column]').forEach(el => el.addEventListener('click', (e) => {
+  e.preventDefault();
+  openForm(el.dataset.column, () => location.reload());
+}));
+
+// Drag a header to reorder columns; the new order is saved on the server for everyone.
+let dragKey = null;
+grid.querySelectorAll('th[draggable]').forEach(th => {
+  th.addEventListener('dragstart', (e) => { dragKey = th.dataset.key; e.dataTransfer.effectAllowed = 'move'; });
+  th.addEventListener('dragover', (e) => {
+    if (!dragKey || th.dataset.key === dragKey) return;
+    e.preventDefault();
+    const right = e.offsetX > th.offsetWidth / 2;
+    th.classList.toggle('drop-right', right); th.classList.toggle('drop-left', !right);
+  });
+  th.addEventListener('dragleave', () => th.classList.remove('drop-left', 'drop-right'));
+  th.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    const right = th.classList.contains('drop-right');
+    th.classList.remove('drop-left', 'drop-right');
+    const keys = [...grid.querySelectorAll('th[draggable]')].map(h => h.dataset.key).filter(k => k !== dragKey);
+    keys.splice(keys.indexOf(th.dataset.key) + (right ? 1 : 0), 0, dragKey);
+    // hidden columns keep their place at the end
+    const hidden = {{ hidden_keys|safe }};
+    await fetch('{% url "column_order" %}', { method: 'POST', headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/json' },
+      body: JSON.stringify(keys.concat(hidden)) });
+    location.reload();
+  });
+  th.addEventListener('dragend', () => { dragKey = null; });
+});
+
+// Client-side sort: numbers numerically, text alphabetically, empty cells always last.
+let sortState = { col: null, dir: 1 };
+grid.querySelectorAll('th .sort').forEach(btn => btn.addEventListener('click', () => {
+  const col = +btn.dataset.col;
+  sortState = { col, dir: sortState.col === col ? -sortState.dir : (col === 0 ? 1 : -1) };
+  grid.querySelectorAll('th .sort').forEach(b => { b.classList.remove('on'); b.textContent = '↕'; });
+  btn.classList.add('on'); btn.textContent = sortState.dir > 0 ? '↑' : '↓';
+  const body = grid.tBodies[0];
+  const rows = [...body.rows];
+  const val = (row) => row.cells[col].dataset.sort;
+  rows.sort((a, b) => {
+    const x = val(a), y = val(b);
+    if (x === '' && y === '') return 0;
+    if (x === '') return 1;
+    if (y === '') return -1;
+    const nx = parseFloat(x), ny = parseFloat(y);
+    const cmp = (!isNaN(nx) && !isNaN(ny)) ? nx - ny : x.localeCompare(y);
+    return cmp * sortState.dir;
+  });
+  rows.forEach(r => body.appendChild(r));
+}));
+
+document.getElementById('search').addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase();
+  let n = 0;
+  [...grid.tBodies[0].rows].forEach(r => {
+    const show = r.cells[0].textContent.toLowerCase().includes(q);
+    r.style.display = show ? '' : 'none';
+    n += show;
+  });
+  document.getElementById('count').textContent = `${n} colleges`;
+});
+</script>
+{% endblock %}

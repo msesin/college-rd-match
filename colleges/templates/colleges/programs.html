@@ -1,0 +1,39 @@
+{% extends "colleges/base.html" %}
+{% block title %}Programs{% endblock %}
+{% block head %}<style> #programs tr.editable { cursor:pointer; } #programs tr.editable:hover td { background:#f4f7fd; } </style>{% endblock %}
+{% block content %}
+<h1>Programs: list view</h1>
+<p class="small"><a href="{% url 'programs' %}">← Back to the colleges × programs table</a></p>
+<p class="muted small">Up to 20 strongest programs per college, one row per program. The dashboard's "Top 3 programs" shows the first three of each college's best list: your own list (programs added here) first, then Niche, then IPEDS.
+<b>IPEDS rows are a stand-in:</b> they rank majors by number of graduates, which is size, not strength. Niche rankings replace them once collected (docs/niche_prompt.md). Click a row to edit it.</p>
+<form class="toolbar" method="get">
+  <select name="college" onchange="this.form.submit()"><option value="">All colleges</option>
+    {% for c in colleges %}<option value="{{ c.unitid }}" {% if c.unitid|stringformat:"s" == college_id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+  </select>
+  <select name="source" onchange="this.form.submit()"><option value="">All sources</option>
+    {% for s in sources %}<option value="{{ s }}" {% if s == source %}selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select>
+  <input type="text" name="q" value="{{ q }}" placeholder="Program name…">
+  <button>Filter</button>
+  {% if college_id %}<a href="#" class="btn secondary" data-add="{% url 'program_add' college_id %}">+ Add a program</a>{% endif %}
+  <span class="muted small">{{ programs|length }} rows</span>
+</form>
+<div class="tablewrap">
+<table id="programs">
+<thead><tr><th>College</th><th class="num">#</th><th>Program</th><th>Ranking / evidence</th><th>Source</th><th class="num">Graduates</th><th></th></tr></thead>
+<tbody>{% for p in programs %}{% include "colleges/_program_row.html" %}{% empty %}<tr><td colspan="7" class="muted">No programs.</td></tr>{% endfor %}</tbody>
+</table>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('programs').addEventListener('click', (e) => {
+  const tr = e.target.closest('tr.editable');
+  if (!tr || e.target.closest('a')) return;
+  openForm(tr.dataset.edit, (data) => { tr.outerHTML = data.html; });
+});
+document.querySelectorAll('[data-add]').forEach(a => a.addEventListener('click', (e) => {
+  e.preventDefault(); openForm(a.dataset.add, () => location.reload());
+}));
+</script>
+{% endblock %}

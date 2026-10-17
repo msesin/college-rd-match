@@ -1,0 +1,87 @@
+{% extends "colleges/base.html" %}
+{% block title %}Programs{% endblock %}
+{% block head %}
+<style>
+  #pgrid td { min-width:150px; max-width:220px; font-size:13px; }
+  #pgrid td:first-child, #pgrid th:first-child { position:sticky; left:0; background:var(--panel); z-index:1; min-width:200px; }
+  #pgrid th:first-child { z-index:3; background:#f1f1ec; }
+  #pgrid td.prog { cursor:pointer; }
+  #pgrid td.prog:hover { background:#f4f7fd; }
+  #pgrid td.match { background:#fff3c4; font-weight:600; }
+  #pgrid th.sorter { cursor:pointer; }
+</style>
+{% endblock %}
+{% block content %}
+<p class="small"><a href="{% url 'dashboard' %}">← Colleges</a></p>
+<h1>Programs</h1>
+<p class="muted small">Each row is a college; columns #1 to #20 are its programs from strongest to weakest. Click a program to edit it.
+<a href="{% url 'programs_list' %}">List view (add or delete programs) →</a></p>
+<div class="toolbar">
+  <form method="get" style="display:inline">
+    <label>Sort by similarity to
+      <select name="similar" onchange="this.form.submit()"><option value="">— no college —</option>
+        {% for c in all_colleges %}<option value="{{ c.unitid }}" {% if c.unitid|stringformat:"s" == similar_to %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select></label>
+  </form>
+  <label>Sort by program
+    <input type="text" id="progsort" list="prognames" placeholder="e.g. Economics" size="26">
+    <datalist id="prognames">{% for n in program_names %}<option value="{{ n }}">{% endfor %}</datalist>
+  </label>
+  <span class="legend" style="margin-left:auto">{% for key, label in sources.items %}{% if key == "niche" or key == "ipeds" or key == "manual" %}<span><span class="dot {{ key }}"></span>{{ label }}</span>{% endif %}{% endfor %}</span>
+</div>
+<div class="tablewrap">
+<table id="pgrid">
+<thead><tr>
+  <th class="sorter" data-col="0">College</th>
+  {% if similar_to %}<th class="sorter num" data-col="1" title="How close this college's program list is to the selected college's (1 = same programs in the same order, 0 = no programs in common)">Similarity</th>{% endif %}
+  {% for n in positions %}<th>#{{ n }}</th>{% endfor %}
+</tr></thead>
+<tbody>
+{% for r in rows %}<tr>
+  <td data-sort="{{ r.college.name|lower }}"><a href="{% url 'college_detail' r.college.unitid %}">{{ r.college.name }}</a></td>
+  {% if similar_to %}<td class="num" data-sort="{{ r.sim|floatformat:3 }}">{{ r.sim|floatformat:2 }}</td>{% endif %}
+  {% for p in r.cells %}{% if p %}<td class="prog" data-name="{{ p.name|lower }}" data-pos="{{ p.position }}" data-edit="{% url 'program_edit' p.pk %}" title="{{ p.ranking }}"><span class="dot {{ p.source }}"></span>{{ p.name }}</td>{% else %}<td></td>{% endif %}{% endfor %}
+</tr>{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const pgrid = document.getElementById('pgrid');
+const body = pgrid.tBodies[0];
+
+pgrid.addEventListener('click', (e) => {
+  const td = e.target.closest('td.prog');
+  if (td && !e.target.closest('a')) openForm(td.dataset.edit, () => location.reload());
+});
+
+// Sort by college name or similarity.
+pgrid.querySelectorAll('th.sorter').forEach(th => {
+  let dir = th.dataset.col === '1' ? -1 : 1;
+  th.addEventListener('click', () => {
+    const i = +th.dataset.col;
+    const rows = [...body.rows];
+    rows.sort((a, b) => {
+      const x = a.cells[i].dataset.sort, y = b.cells[i].dataset.sort;
+      const nx = parseFloat(x), ny = parseFloat(y);
+      return ((!isNaN(nx) && !isNaN(ny)) ? nx - ny : x.localeCompare(y)) * dir;
+    });
+    rows.forEach(r => body.appendChild(r));
+    dir = -dir;
+  });
+});
+
+// Sort by program: colleges where it is placed highest come first, colleges without it last.
+document.getElementById('progsort').addEventListener('input', (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  const pos = (row) => {
+    const cell = [...row.querySelectorAll('td.prog')].find(td => q && td.dataset.name.includes(q));
+    return cell ? +cell.dataset.pos : Infinity;
+  };
+  body.querySelectorAll('td.prog').forEach(td => td.classList.toggle('match', !!q && td.dataset.name.includes(q)));
+  if (!q) return;
+  [...body.rows].sort((a, b) => pos(a) - pos(b)).forEach(r => body.appendChild(r));
+});
+</script>
+{% endblock %}

@@ -1,0 +1,27 @@
+<div class="card" style="padding:8px; overflow-x:auto"><table class="results sortable" id="matches">
+<thead><tr>
+  <th data-sort="num" title="Sort">#<span class="arrow"></span></th>
+  <th data-sort="text" title="Sort">College<span class="arrow"></span></th>
+  <th class="center" data-sort="num" title="Sort">Match<span class="arrow"></span></th>
+  <th>Why</th>
+  <th class="center" data-sort="num" title="Your list, in your order. Add or remove colleges here. Sort">My list<span class="arrow"></span></th>
+  <th class="center" data-sort="num" title="UGS students who have this college on their list now. Sort">UGS applicants<span class="arrow"></span></th>
+  <th class="center" data-sort="num" title="Share of international applicants admitted. Sort">Intl admit rate<span class="arrow"></span></th>
+  <th class="center" data-sort="num" title="How many UGS students went to this college per year on average ({{ ugs_years }}). Sort">UGS students / year<span class="arrow"></span></th>
+</tr></thead>
+<tbody>
+{% for row in rows %}{% with d=row.r.details %}
+<tr data-mine="{% if row.choice %}1{% endif %}">
+  <td data-v="{{ row.rank }}">{{ row.rank }}</td>
+  <td data-v="{{ row.r.college.name|lower }}"><b>{{ row.r.college.name }}</b><div class="small muted">{{ row.r.college.city }}, {{ row.r.college.state }}</div></td>
+  <td class="center" data-v="{{ row.final }}"><b>{{ row.final|floatformat:0 }}%</b></td>
+  <td class="small">{{ d.why }}{% if d.advice %} <b>{{ d.advice }}</b>{% endif %}</td>
+  <td class="center" data-v="{{ row.choice|default:999 }}">{% include "colleges/portal/_list_button.html" %}</td>
+  <td class="center" data-v="{{ row.applicants }}">{{ row.applicants }}</td>
+  <td class="center" data-v="{% if d.intl_admit_rate is not None %}{{ d.intl_admit_rate }}{% elif d.overall_admit_rate is not None %}{{ d.overall_admit_rate }}{% else %}-1{% endif %}">{% if d.intl_admit_rate is not None %}{{ d.intl_admit_rate|floatformat:1 }}%{% elif d.overall_admit_rate is not None %}<span class="muted" title="Overall admit rate; the college publishes no international figure">({{ d.overall_admit_rate|floatformat:0 }}% overall)</span>{% endif %}</td>
+  <td class="center" data-v="{{ row.profile.ugs_admits_avg|default_if_none:-1 }}">{% if row.profile.ugs_admits_avg is not None %}{{ row.profile.ugs_admits_avg|floatformat:1 }}{% else %}<span class="muted">—</span>{% endif %}</td>
+</tr>{% endwith %}{% endfor %}
+</tbody>
+</table>
+<p class="small muted" id="none-mine" hidden style="margin:8px 4px">None of the colleges on your list is here. Add colleges on the <a href="{% url 'portal' %}">My application</a> tab.</p>
+</div>
