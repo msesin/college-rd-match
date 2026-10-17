@@ -155,17 +155,21 @@ def make_client(name):
     return anthropic.Anthropic(max_retries=4)
 
 
-def _call_gemini(client, model, prompt, schema):
+PATIENT = (30, 60, 90)   # seconds to wait before each retry when Gemini is busy (batch commands)
+QUICK = (3,)             # while a student waits on the page: one short retry, then give up
+
+
+def _call_gemini(client, model, prompt, schema, waits=PATIENT):
     from google.genai import errors, types
 
     config = types.GenerateContentConfig(response_mime_type="application/json", response_json_schema=schema)
-    for attempt in range(4):
+    for attempt in range(len(waits) + 1):
         try:
             response = client.models.generate_content(model=model, contents=prompt, config=config)
             break
         except errors.APIError as exc:
-            if getattr(exc, "code", None) in (429, 500, 503) and attempt < 3:
-                time.sleep(30 * (attempt + 1))  # quota or overload: wait for the window to free up
+            if getattr(exc, "code", None) in (429, 500, 503) and attempt < len(waits):
+                time.sleep(waits[attempt])  # quota or overload: wait for the window to free up
                 continue
             raise
     text = (response.text or "").strip()

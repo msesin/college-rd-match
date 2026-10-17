@@ -355,10 +355,12 @@ def portal(request):
                     student.submitted_at = timezone.now()
                     student.save(update_fields=["submitted_at"])
             if action == "submit":
-                # Results right away; Gemini's ratings follow in the background, then the match runs again.
+                # Gemini rates the student's texts first, so the first match uses the ratings (about 10 seconds).
+                # If it is skipped or fails, results come right away and a background retry updates them later.
                 # Not for the public demo: its saved ratings are used as they are.
+                rated = not demo.is_demo(student) and student_ai.rate_now(student)
                 refresh = _refresh_matches(student)
-                if not demo.is_demo(student):
+                if not rated and not demo.is_demo(student):
                     student_ai.rate_in_background(student, then=refresh)
                 return redirect("/portal/matches/?submitted=1")
             return redirect("/portal/?saved=draft")

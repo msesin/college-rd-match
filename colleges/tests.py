@@ -335,6 +335,52 @@ class PortalFlowTest(TestCase):
         self.assertFalse(st.choices.filter(college_id=100019).exists())
         self.assertTrue(self.client.login(username=demo.DEMO_USERNAME, password=demo.DEMO_PASSWORD))
 
+    def test_gemini_rates_on_submit_before_the_match(self):
+        import json
+        from unittest import mock
+
+        from colleges.models import VibeJudgement
+        from sources import matching, student_ai
+
+        def fake_gemini(client, model, prompt, schema, waits=None):
+            self.assertEqual(waits, (3,))                                   # short waits while the student waits
+            if schema is student_ai.PROFILE_SCHEMA:
+                levels = {"school_type": "top_ua", "talent": "very_strong", "extracurricular": "high",
+                          "volunteer": "medium", "work": "low"}
+                return json.dumps({k: {"level": v, "reason": "test"} for k, v in levels.items()}), {}, model
+            return json.dumps({"traits": ["curious"], "standout": "test", "judgements": [
+                {"unitid": c.unitid, "level": "high", "reason": "test"} for c in College.objects.all()]}), {}, model
+
+        self._signup("mckayla@example.com")
+        env = {"GEMINI_API_KEY": "test-key", "ALLOW_STUDENT_DATA_TO_GEMINI": "1"}
+        with mock.patch.dict(os.environ, env), override_settings(STUDENT_AI_ON_SUBMIT=True), \
+                mock.patch("sources.college_ai.make_client"), \
+                mock.patch("sources.college_ai._call_gemini", side_effect=fake_gemini), \
+                mock.patch("sources.student_ai.rate_in_background") as background:
+            self.client.post("/portal/", self._complete_form(list(College.objects.order_by("unitid")[:12])))
+        self.student.refresh_from_db()
+        self.assertEqual(self.student.academic_tier, "very_strong")
+        self.assertEqual(VibeJudgement.objects.filter(student=self.student).count(), 20)
+        background.assert_not_called()                                      # nothing left for the background
+        # the very first results already use the ratings
+        r = matching.latest_run(self.student).results.get(college_id=100005)
+        metrics = {m["key"]: m["score"] for m in r.details["metrics"]}
+        self.assertEqual((metrics["talent"], metrics["character"], metrics["extracurricular"]), (1.0, 1.0, 1.0))
+
+    def test_gemini_failure_on_submit_falls_back_to_the_background(self):
+        from unittest import mock
+
+        self._signup("mckayla@example.com")
+        env = {"GEMINI_API_KEY": "test-key", "ALLOW_STUDENT_DATA_TO_GEMINI": "1"}
+        with mock.patch.dict(os.environ, env), override_settings(STUDENT_AI_ON_SUBMIT=True), \
+                mock.patch("sources.college_ai.make_client"), \
+                mock.patch("sources.college_ai._call_gemini", side_effect=RuntimeError("Gemini is down")), \
+                mock.patch("sources.student_ai.rate_in_background") as background, \
+                self.assertLogs("sources.student_ai", "ERROR"):
+            r = self.client.post("/portal/", self._complete_form(list(College.objects.order_by("unitid")[:12])))
+        self.assertRedirects(r, "/portal/matches/?submitted=1", fetch_redirect_response=False)   # results anyway
+        background.assert_called_once()
+
     def test_engine_excludes_men_from_womens_colleges(self):
         from sources import matching
 

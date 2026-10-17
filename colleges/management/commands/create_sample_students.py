@@ -36,7 +36,7 @@ def ua(**grades):
 
 SAMPLES = [
     {
-        "name": "Olena Kovalenko", "pronouns": "she", "school_name": "Kyiv Natural Science Lyceum No. 145, Kyiv", "det_score": 140, "sat_score": 1490, "class_top_pct": 3,
+        "name": "Solomiya Solomiya", "pronouns": "she", "school_name": "Kyiv Natural Science Lyceum No. 145, Kyiv", "det_score": 140, "sat_score": 1490, "class_top_pct": 3,
         "curriculum": "no", "gpa_note": "Year 11 (2025-26), Ukrainian 12-point scale",
         "subject_grades": ua(Ukrainian_language=11, Ukrainian_literature=11, World_literature=11, English=12,
                              History_of_Ukraine=10, World_history=11, Algebra=12, Geometry=12, Physics=12,
@@ -167,6 +167,9 @@ SAMPLES = [
     },
 ]
 
+# Earlier names of sample students: a reset renames them instead of creating a second student.
+RENAMED = {"Olena Kovalenko": "Solomiya Solomiya"}
+
 DEFAULTS = {"gpa": None, "class_top_pct": None, "notes": "", "submitted_at": None}
 
 
@@ -226,6 +229,9 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"{n} sample students deleted"))
             return
         existing = {decrypt(s.identity.name_encrypted): s for s in samples.select_related("identity") if hasattr(s, "identity")}
+        for old, new in RENAMED.items():
+            if old in existing and new not in existing:
+                existing[new] = existing.pop(old)
         colleges = matching.load_colleges()
         for i, data in enumerate(SAMPLES):
             data = {**DEFAULTS, **data}

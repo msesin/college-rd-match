@@ -10,7 +10,7 @@ resets it, e.g. hourly from cron on the server. Since anyone can use it, the dem
 
 DEMO_USERNAME = "demo"
 DEMO_PASSWORD = "ugs-demo-2026"
-DEMO_STUDENT = "Olena Kovalenko"   # the fictional sample student behind the login
+DEMO_STUDENT = "Solomiya Solomiya"   # the fictional sample student behind the login
 # IPEDS UNITID: the 8 Ivy League colleges and 7 other well-known ones. Colleges missing from the database are skipped;
 # if none of them is there, the demo sees every college.
 DEMO_COLLEGES = {

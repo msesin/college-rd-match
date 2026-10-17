@@ -16,8 +16,9 @@ match can still be turned down, especially when the student asks for full financ
 college gave full points and where points were lost), how many UGS students have the college on their list, the
 international admit rate and how many UGS students went there per year on average (both for context). It is one
 table, sortable by any column, with an "Only my list" filter; excluded colleges are listed apart. Students add or remove
-colleges right in the table ("My list" column; added at the end; 1-20 colleges). Gemini's ratings follow in the background a minute
-later, and the match runs again. That is the **preliminary match**. The **crowding cut** (below) is applied on top
+colleges right in the table ("My list" column; added at the end; 1-20 colleges). On submit, Gemini rates the student's
+texts first (about 10 seconds; the page says so), so the first results already use the ratings. If Gemini is busy or
+fails, the results come anyway and a background retry updates them a minute later. That is the **preliminary match**. The **crowding cut** (below) is applied on top
 whenever results are shown, from the current lists, so the final match changes live: when any student adds or removes
 a college, or a new student submits, everyone's numbers update (the "My matches" page checks every 20 seconds and
 reloads itself). Students see only the final %. After submitting, students keep their college list up to date (up to
@@ -45,8 +46,8 @@ empty answer is rated "low" (talent "moderate") in code, without asking. For the
 matches (at most about a quarter of the colleges), "moderate" is the default, "none" means the traits clash. Ratings
 are redone only when the text, a college vibe or the prompt changes. A level changed by hand on the Students tab is
 kept. Privacy: text goes through `for_ai()` (no names or emails, contacts scrubbed); only the "sample" cohort is sent
-unless `.env` has `ALLOW_STUDENT_DATA_TO_GEMINI=1`. Until a rating exists (real students, for now), the metric gets
-half points; a counselor can set the level by hand.
+unless `.env` has `ALLOW_STUDENT_DATA_TO_GEMINI=1`. Until a rating exists (for example, real students while that is
+off), the metric gets half points; a counselor can set the level by hand.
 
 ## Step 1: hard rules (college requirements)
 

@@ -175,12 +175,23 @@ right, press <b>Submit</b> at the bottom; you can submit without changing anythi
 </div>
 
 <div class="card" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
-  <button class="primary" name="action" value="submit" onclick="return confirm('Submit your form? You will not be able to change it afterwards.')">Submit</button>
+  <button class="primary" name="action" value="submit" id="submit-button" onclick="return confirm('Submit your form? You will not be able to change it afterwards.')">Submit</button>
+  <span class="small muted" id="submit-wait" hidden>Submitting. We are reading your answers to work out your matches: this takes
+  about 10 seconds, please keep this page open.</span>
   <button class="secondary" name="action" value="save">Save changes and finish later</button>
 </div>
 </form>
 {% for f in files %}<form id="del-{{ f.pk }}" method="post" action="{% url 'portal_file_delete' f.pk %}">{% csrf_token %}</form>{% endfor %}
 <script>
+  // While the submit runs (Gemini reads the answers first), show why it takes a moment and block a second click.
+  // The buttons are disabled only after the browser has collected the form, so "action=submit" is still sent.
+  const submitButton = document.getElementById('submit-button');
+  if (submitButton) submitButton.form.addEventListener('submit', e => {
+    if (e.submitter !== submitButton) return;
+    document.getElementById('submit-wait').hidden = false;
+    setTimeout(() => submitButton.form.querySelectorAll('button').forEach(b => b.disabled = true), 0);
+  });
+
   // Edit opens an answer; Cancel closes it again and puts back the saved answer.
   document.querySelectorAll('[data-edit]').forEach(btn => {
     const box = btn.closest('.field');

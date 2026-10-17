@@ -152,7 +152,7 @@ def profile_needs_rating(student, model):
     return read.get("input_hash") != _hash(model, json.dumps(inputs, sort_keys=True))
 
 
-def rate_profile(student, client, model, limiter=None):
+def rate_profile(student, client, model, limiter=None, waits=None):
     """Ask Gemini for the five profile ratings and save them. Returns {rating: {"level", "reason"}}."""
     from sources.college_ai import _call_gemini
 
@@ -161,7 +161,7 @@ def rate_profile(student, client, model, limiter=None):
     if limiter:
         limiter.wait()
     raw, _, used = _call_gemini(client, model, PROFILE_PROMPT.format(**{k: v or "(not given)" for k, v in inputs.items()}),
-                                PROFILE_SCHEMA)
+                                PROFILE_SCHEMA, **({"waits": waits} if waits else {}))
     data = json.loads(raw)
     # Empty answers are "low" without Gemini's opinion.
     for key, empty in (("extracurricular", not inputs["activities"]), ("volunteer", not inputs["activities"]),
@@ -205,7 +205,7 @@ def vibe_needs_judging(student, colleges, model):
     return any(cached.get(c.unitid) != _vibe_hash(summary, c, model) for c in colleges)
 
 
-def judge_vibe(student, client, model, limiter=None):
+def judge_vibe(student, client, model, limiter=None, waits=None):
     """Judge one student's self-summary against every college vibe and save it. Returns the read of the student."""
     from sources.college_ai import _call_gemini
 
@@ -215,7 +215,8 @@ def judge_vibe(student, client, model, limiter=None):
     lines = "\n".join(f"{c.unitid}: {c.name}. {getattr(c.profile, 'vibe', '') or 'no description'}" for c in colleges)
     if limiter:
         limiter.wait()
-    raw, _, used = _call_gemini(client, model, VIBE_PROMPT.format(student=summary, colleges=lines), VIBE_SCHEMA)
+    raw, _, used = _call_gemini(client, model, VIBE_PROMPT.format(student=summary, colleges=lines), VIBE_SCHEMA,
+                                **({"waits": waits} if waits else {}))
     data = json.loads(raw)
     by_id = {c.unitid: c for c in colleges}
     for j in data.get("judgements", []):
@@ -233,6 +234,34 @@ def judge_vibe(student, client, model, limiter=None):
 
 
 # ---------------------------------------------------------------- after a student submits
+
+def rate_now(student):
+    """On submit: ask Gemini for the missing ratings (profile, self-summary vs college vibes) right away, so the
+    first match already uses them (about 10 seconds). Returns True when nothing is left to rate; False when skipped
+    (no Gemini key, the student may not be sent, or settings.STUDENT_AI_ON_SUBMIT is off) or when Gemini failed;
+    the caller then falls back to rate_in_background."""
+    import logging
+
+    from django.conf import settings
+
+    from sources import college_ai
+
+    name, model = college_ai.provider()
+    if not getattr(settings, "STUDENT_AI_ON_SUBMIT", True) or name != "gemini" or not allowed(student):
+        return False
+    colleges = list(College.objects.select_related("profile"))
+    try:
+        client = college_ai.make_client(name)
+        if profile_needs_rating(student, model):
+            rate_profile(student, client, model, waits=college_ai.QUICK)
+        if vibe_needs_judging(student, colleges, model):
+            judge_vibe(student, client, model, waits=college_ai.QUICK)
+        return True
+    except Exception:
+        logging.getLogger(__name__).exception("Gemini rating on submit failed for %s; retrying in the background",
+                                              student.code)
+        return False
+
 
 def rate_in_background(student, then=None):
     """Ask Gemini for any missing ratings of this student in a background thread, then call then().
