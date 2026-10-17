@@ -110,8 +110,26 @@ class StudentAdminForm(forms.ModelForm):
 class StudentFileInline(admin.TabularInline):
     model = StudentFile
     extra = 0
-    fields = ["kind", "original_name", "file_path", "added_at"]
-    readonly_fields = ["added_at"]
+    fields = ["kind", "original_name", "file_path", "needs_verification", "reading", "added_at"]
+    readonly_fields = ["added_at", "reading"]
+
+    @admin.display(description="Transcript reading")
+    def reading(self, obj):
+        r = obj.ocr or {}
+        if not r:
+            return "-"
+        return (f"{r.get('status')} by {', '.join(r.get('models') or []) or '-'}; confidence {r.get('confidence')}"
+                + (f"; {'; '.join(r['problems'])}" if r.get("problems") else ""))
+
+
+@admin.register(StudentFile)
+class StudentFileAdmin(admin.ModelAdmin):
+    """The review queue: transcripts the reader was not sure about (filter: needs verification = yes)."""
+    list_display = ["student", "original_name", "needs_verification", "added_at"]
+    list_filter = ["needs_verification", "kind"]
+    fields = ["student", "kind", "original_name", "file_path", "needs_verification", "ocr", "added_at"]
+    readonly_fields = ["student", "file_path", "added_at", "ocr"]
+    search_fields = ["student__code", "original_name"]
 
 
 @admin.register(Student)

@@ -11,7 +11,7 @@ from pathlib import Path
 
 from django import forms
 from django.conf import settings
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -366,7 +366,9 @@ def students_page(request):
 
     cols = student_columns()
     rows = []
-    for st in (Student.objects.select_related("identity", "user").annotate(n_files=Count("files"))
+    for st in (Student.objects.select_related("identity", "user")
+               .annotate(n_files=Count("files", distinct=True),
+                         n_review=Count("files", filter=Q(files__needs_verification=True), distinct=True))
                .prefetch_related("choices__college")):
         cells = [dict(render_student_cell(c, st), col=c) for c in cols]
         rows.append({"s": st, "name": _student_name(st), "cells": cells, "choices": list(st.choices.all())})

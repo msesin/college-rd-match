@@ -155,9 +155,10 @@ STUDENT_COLUMNS = {
     "det": Column("det", "DET", "The student's Duolingo English Test score.", ("det_score",), "s_number"),
     "sat": Column("sat", "SAT", "The student's SAT score (blank if not taken).", ("sat_score",), "s_number"),
     "gpa": Column("gpa", "GPA",
-                  "Grades by subject on the school's own scale. The GPA level (will get in / maybe / red flags) is "
-                  "worked out from them by the team's rules for each curriculum; GPA on a 4.0 scale if known.",
-                  ("subject_grades", "gpa", "gpa_note"), "s_gpa"),
+                  "Grades by subject for the past 2 school years, on the school's own scale. The GPA level (will "
+                  "get in / maybe / red flags) is worked out from both years by the team's rules for each curriculum; "
+                  "GPA on a 4.0 scale if known. 'Transcript: check by hand' = the transcript reader was not sure.",
+                  ("subject_grades", "subject_grades_prev", "gpa", "gpa_note"), "s_gpa"),
     "transcript_perf": Column("transcript_perf", "Transcript performance",
                               "Class rank (top X%) and relevant coursework: grades in the subjects that matter for the "
                               "student's first major (strong / okay / weak). Both worked out from the data.",

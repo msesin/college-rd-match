@@ -88,6 +88,8 @@ DJANGO_CSRF_TRUSTED_ORIGINS=https://dashboard.example.com
 STUDENT_EMAIL_DOMAINS=<your organisation's email domain, e.g. yourorg.org: only these addresses can sign up>
 GEMINI_API_KEY=<same as on your laptop>
 GEMINI_MODEL=<same as on your laptop>
+GEMINI_MODEL_PRO=gemini-3.1-pro-preview
+ALLOW_STUDENT_DATA_TO_GEMINI=<1 only with a paid-tier key whose terms do not use inputs for training>
 LLM_RPM=15
 ```
 Then:

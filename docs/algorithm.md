@@ -116,6 +116,28 @@ the Colleges dashboard and in the students' matches, and the UGS results page (l
 not on the list are kept and shown too). Sheet names are matched to the colleges on the list automatically; names that differ go in
 `data/ugs_history_names.json` (see `sources/ugs_history.py`).
 
+### Reading transcripts (OCR)
+
+Students can type their grades or press "Autofill with a transcript" (`sources/ocr.py`). Each file (PNG, JPEG, PDF,
+HEIC; photo, scan or screenshot; Ukrainian or English; printed or handwritten) is read in two tiers, one request each:
+
+1. **Fast model** (`GEMINI_MODEL`, gemini-3.5-flash-lite), JSON mode, temperature 0: subjects and grades per school
+   year, `is_handwritten`, `confidence_score` (0-1), the class rank if printed, and the trend between years (transcript
+   performance, in the same request).
+2. **Routing:** printed and confidence >= 0.95 -> accepted. Handwritten or confidence < 0.95 -> the same file goes to
+   the **precise model** (`GEMINI_MODEL_PRO`, gemini-3.1-pro-preview) with the same instructions and schema.
+3. Precise model >= 0.95 -> accepted. Below, or unavailable -> stored with `needs_verification` (the counselors'
+   review queue: Admin, Student files, filter "needs verification"; "Transcript: check by hand" on the Students tab),
+   and the student is asked for another format or to type the grades in.
+
+The model's own confidence is not enough (in tests it said 0.95 for a photo it had read one row off), so the code
+checks too, and any problem caps the confidence below 0.95: every grade must fit its scale; each year's grades read
+straight down the column must match the subject rows; a printed transcript with a blank grade is checked again; text
+addressed to an AI is flagged. Empty or struck-through cells are null. The two most recent years fill the form (one
+grading scale only); the GPA is the average out of 12 converted to 4.0 (12 and 11 = 4.0, 10 = 3.7, 9 = 3.3, 8 = 3.0,
+7 = 2.7 ... interpolated; *proposal*), or the 4.0 average of US letter grades. Nothing is saved until the student
+checks the grades and saves. A file already read is never sent again; at most 10 autofill runs per student per day.
+
 ### Transcript, from grades by subject
 
 Grades are stored by subject on the school's own scale (Students tab, GPA column; the portal asks for them too):

@@ -48,7 +48,8 @@
     <p class="muted small">Submitted on {{ student.submitted_at|date:"F j, Y" }}. Need to change something here? Contact your UGS counselor.</p>
     <p><b>Pronouns:</b> {{ student.get_pronouns_display }} · <b>School:</b> {{ student.school_name|default:"—" }} · <b>DET:</b> {{ student.det_score|default:"—" }} · <b>SAT:</b> {{ student.sat_score|default:"—" }}</p>
     <p><b>Grades:</b> {% if student.gpa %}GPA {{ student.gpa }}{% endif %} {{ student.gpa_note }}{% if student.class_top_pct %} · top {{ student.class_top_pct|floatformat:"-1" }}% of class{% endif %}</p>
-    {% if student.subject_grades %}<p><b>By subject:</b> {{ student.subject_grades|grades_text }}</p>{% endif %}
+    {% if student.subject_grades %}<p><b>By subject, latest year:</b> {{ student.subject_grades|grades_text }}</p>{% endif %}
+    {% if student.subject_grades_prev %}<p><b>The year before:</b> {{ student.subject_grades_prev|grades_text }}</p>{% endif %}
     <p><b>Majors:</b> {{ student.major_1 }}{% if student.major_2 %}, {{ student.major_2 }}{% endif %}{% if student.major_3 %}, {{ student.major_3 }}{% endif %} · <b>IB/AP/A-levels:</b> {{ student.get_curriculum_display }}</p>
     <p><b>Awards and olympiads:</b> {{ student.academic_note|linebreaksbr|default:"—" }}</p>
     <p><b>Activities:</b> {{ student.activities|linebreaksbr|default:"—" }}</p>
@@ -110,8 +111,29 @@ right, press <b>Submit</b> at the bottom; you can submit without changing anythi
 
 <div class="card">
   <h2>3. Grades and transcript</h2>
+  <p class="muted small">We need your grades for the <b>past 2 academic years of high school</b>. Type them in below, or let
+  us read them from your transcript.</p>
+  {% demo_user as is_demo %}{% if autofill and not is_demo %}
+  <div class="autofill">
+    <button type="button" class="secondary" id="autofill-open">Autofill with a transcript</button>
+    <div id="autofill-panel" hidden>
+      <p class="small">Choose your transcript for the <b>past 2 academic years</b> (several files are fine: PNG, JPEG, PDF or
+      HEIC, up to {{ max_mb }} MB each). Printed, handwritten, photos and scans all work; for photos, shoot the whole page
+      from straight above in good light.</p>
+      <input type="file" id="autofill-files" multiple accept=".png,.jpg,.jpeg,.pdf,.heic,.heif">
+      <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap">
+        <button type="button" class="primary" id="autofill-run" disabled>I've added my transcript: read it</button>
+        <button type="button" class="secondary" id="autofill-cancel">Cancel</button>
+      </div>
+      <div class="small muted" style="margin-top:6px">We fill in your grades and GPA below. Check every grade before you save.</div>
+    </div>
+    <div class="errors" id="autofill-error" hidden></div>
+    <div class="notice" id="autofill-done" hidden></div>
+  </div>
+  {% endif %}
   {% include "colleges/portal/_field.html" with f=fields.curriculum help='Choose "No" if your school follows the Ukrainian national curriculum.' %}
   {% include "colleges/portal/_field.html" with f=fields.subject_grades %}
+  {% include "colleges/portal/_field.html" with f=fields.subject_grades_prev %}
   {% include "colleges/portal/_field.html" with f=fields.gpa %}
   {% include "colleges/portal/_field.html" with f=fields.gpa_note %}
   {% include "colleges/portal/_field.html" with f=fields.class_top_pct %}
@@ -126,8 +148,9 @@ right, press <b>Submit</b> at the bottom; you can submit without changing anythi
       {% else %}
       {% if files %}<ul class="small">{% for f in files %}<li><a href="{% url 'portal_file' f.pk %}" target="_blank">{{ f.original_name }}</a>
         <button type="submit" form="del-{{ f.pk }}" style="border:none; background:none; color:#b42318; cursor:pointer">remove</button></li>{% endfor %}</ul>{% endif %}
-      <input type="file" id="id_transcripts" name="transcripts" multiple accept=".png,.jpg,.jpeg,.pdf,.heic,.webp">
-      <div class="helptext">Photos or scans of all your school years (PNG, JPG, HEIC or PDF, up to {{ max_mb }} MB each). You can upload several files.</div>
+      <input type="file" id="id_transcripts" name="transcripts" multiple accept=".png,.jpg,.jpeg,.pdf,.heic,.heif,.webp">
+      <div class="helptext">Your grades for the past 2 academic years of high school: photos, scans or screenshots (PNG,
+      JPEG, HEIC or PDF, up to {{ max_mb }} MB each). You can upload several files.</div>
       {% endif %}
     </div>
   </div>
@@ -182,7 +205,55 @@ right, press <b>Submit</b> at the bottom; you can submit without changing anythi
 </div>
 </form>
 {% for f in files %}<form id="del-{{ f.pk }}" method="post" action="{% url 'portal_file_delete' f.pk %}">{% csrf_token %}</form>{% endfor %}
+<div class="loading" id="autofill-loading" hidden><div class="loading-box"><div class="spinner"></div>
+  <b>Reading your transcript…</b><div class="small muted">This takes a few seconds, up to a minute for handwritten pages.
+  Please keep this page open.</div></div></div>
 <script>
+  // "Autofill with a transcript": send the chosen files, show the loading screen, then fill the grades in (opened, so
+  // the student sees and checks them). Nothing is saved until the student saves the form.
+  (() => {
+    const open = document.getElementById('autofill-open');
+    if (!open) return;
+    const panel = document.getElementById('autofill-panel'), input = document.getElementById('autofill-files');
+    const run = document.getElementById('autofill-run'), errorBox = document.getElementById('autofill-error');
+    const done = document.getElementById('autofill-done'), loading = document.getElementById('autofill-loading');
+    open.addEventListener('click', () => { panel.hidden = false; open.hidden = true; errorBox.hidden = true; });
+    document.getElementById('autofill-cancel').addEventListener('click', () => { panel.hidden = true; open.hidden = false; input.value = ''; run.disabled = true; });
+    input.addEventListener('change', () => { run.disabled = !input.files.length; });
+    function fill(name, value) {
+      const el = document.querySelector(`[name="${name}"]`);
+      if (!el || value === null || value === undefined || value === '') return;
+      el.value = value;
+      const box = el.closest('.field');
+      if (box) { box.classList.add('editing'); box.classList.add('autofilled'); }
+    }
+    run.addEventListener('click', async () => {
+      const data = new FormData();
+      [...input.files].forEach(f => data.append('transcripts', f));
+      data.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+      loading.hidden = false; errorBox.hidden = true; done.hidden = true;
+      try {
+        const r = await fetch("{% url 'portal_transcript_autofill' %}", {method: 'POST', body: data, headers: {'Accept': 'application/json'}});
+        const out = await r.json();
+        if (!out.ok) { errorBox.textContent = out.error; errorBox.hidden = false; return; }
+        fill('subject_grades', out.grades_latest); fill('subject_grades_prev', out.grades_prev);
+        fill('gpa', out.gpa); fill('gpa_note', out.gpa_note); fill('class_top_pct', out.class_top_pct);
+        const curriculum = document.querySelector('[name=curriculum]');
+        if (curriculum && !curriculum.value && out.curriculum) fill('curriculum', out.curriculum);
+        panel.hidden = true; open.hidden = false; input.value = ''; run.disabled = true;
+        done.textContent = 'We filled in your grades' + (out.labels.length ? ' (' + out.labels.join(' and ') + ')' : '') +
+          ' and your GPA from your transcript. Please check every grade, correct anything wrong, then press "Save changes".' +
+          (out.one_year ? ' We found only one school year: please add the other year too.' : '');
+        done.hidden = false;
+        if (out.warning) { errorBox.textContent = out.warning; errorBox.hidden = false; }
+        done.scrollIntoView({block: 'center', behavior: 'smooth'});
+      } catch (e) {
+        errorBox.textContent = 'Something went wrong while reading your transcript. Please try again, or type your grades in.';
+        errorBox.hidden = false;
+      } finally { loading.hidden = true; }
+    });
+  })();
+
   // While the submit runs (Gemini reads the answers first), show why it takes a moment and block a second click.
   // The buttons are disabled only after the browser has collected the form, so "action=submit" is still sent.
   const submitButton = document.getElementById('submit-button');

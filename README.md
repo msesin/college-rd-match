@@ -34,6 +34,10 @@ with its own college list, a school counseling office, or an independent counsel
   and complete the profile (tests, grades by
   subject, school, majors, awards, activities, work, a short self-description, transcript upload), and choose 12-20
   colleges.
+- Type in their grades for the past 2 years, or press "Autofill with a transcript": photos, scans, screenshots or
+  PDFs, Ukrainian or English, printed or handwritten, are read by a fast model and, when it is unsure or the page is
+  handwritten, by a precise one; what neither reads confidently goes to a counselor's review queue. The GPA is
+  calculated (Ukrainian 12-point averages converted to 4.0).
 - See their matches as soon as they submit: one sortable table with an "Only my list" filter, the reasons for each
   college, and add/remove buttons. Matches update live as other students change their lists.
 
@@ -135,6 +139,9 @@ The app was built for minors' data (grades, family income, displacement status),
   fictional sample students are sent. Set `ALLOW_STUDENT_DATA_TO_GEMINI=1` only on a paid plan whose terms do not use
   your inputs for training.
 - A student sees only their own data; staff pages are closed to students.
+- Prompt injection: students' texts and transcripts are data, never instructions. Prompts wrap them in tags they cannot
+  close, the transcript reader must answer in a strict schema and flags text addressed to an AI, the code checks every
+  grade against its scale, flagged answers are never accepted automatically, and counselors see the flags.
 - The public demo account cannot upload files, never calls the AI, and does not affect real students' matches.
 
 ## Deploy

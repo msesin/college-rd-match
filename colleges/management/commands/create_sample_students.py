@@ -173,6 +173,16 @@ RENAMED = {"Olena Kovalenko": "Solomiya Solomiya"}
 DEFAULTS = {"gpa": None, "class_top_pct": None, "notes": "", "submitted_at": None}
 
 
+def previous_year(grades):
+    """A made-up year before, close to the latest one: some numeric grades one lower; letter grades as they are."""
+    out = {}
+    for i, (subject, grade) in enumerate(grades.items()):
+        if subject.lower().startswith("core"):
+            continue
+        out[subject] = max(1, grade - 1) if isinstance(grade, int) and i % 3 == 1 else grade
+    return out
+
+
 def sample_choices(student, colleges, n=12):
     """The colleges the student can apply to (no hard rule against them) whose top programs fit the student's
     majors best. With fewer than n of those (a short list, like the demo's), the others fill it up, last."""
@@ -235,6 +245,7 @@ class Command(BaseCommand):
         colleges = matching.load_colleges()
         for i, data in enumerate(SAMPLES):
             data = {**DEFAULTS, **data}
+            data.setdefault("subject_grades_prev", previous_year(data.get("subject_grades", {})))
             name = data.pop("name")
             if opts["demo_only"] and name != demo.DEMO_STUDENT:
                 continue

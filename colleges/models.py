@@ -338,9 +338,12 @@ class Student(models.Model):
                                       help_text="e.g. 5 means top 5% of the class")
     transcript_note = models.TextField("Transcript note", blank=True)
     subject_grades = models.JSONField(
-        "Grades by subject", default=dict, blank=True,
+        "Grades by subject (latest year)", default=dict, blank=True,
         help_text="Latest grade per subject on the school's own scale: Ukrainian 1-12, IB 1-7 (plus "
                   "'Core (TOK/EE)': 0-3), A-levels A*-E, US letter grades (AP courses start with 'AP')")
+    subject_grades_prev = models.JSONField(
+        "Grades by subject (previous year)", default=dict, blank=True,
+        help_text="The year before, on the same scale. Both years count for the GPA and coursework levels.")
     major_1 = models.CharField("Intended major 1", max_length=100, blank=True)
     major_2 = models.CharField("Intended major 2", max_length=100, blank=True)
     major_3 = models.CharField("Intended major 3", max_length=100, blank=True)
@@ -399,6 +402,10 @@ class StudentFile(models.Model):
     original_name = models.CharField(max_length=255, blank=True)
     sha256 = models.CharField(max_length=64, blank=True)
     added_at = models.DateTimeField(auto_now_add=True)
+    ocr = models.JSONField("Transcript reading", default=dict, blank=True,
+                           help_text="What the OCR pipeline read (sources/ocr.py): models used, confidence, grades")
+    needs_verification = models.BooleanField(
+        default=False, help_text="The OCR was not confident enough: a counselor should check the grades by hand")
 
     class Meta:
         ordering = ["student", "original_name"]

@@ -7,13 +7,16 @@
   {% with t=s|transcript_levels %}{% if t.gpa.0 %}<div><span class="badge {% if t.gpa.0 == 'top' %}optional{% elif t.gpa.0 == 'maybe' %}l2{% else %}required{% endif %}" title="{{ t.gpa.1 }}">{% if t.gpa.0 == 'top' %}Will get in{% elif t.gpa.0 == 'maybe' %}Maybe{% else %}Red flags{% endif %}</span></div>
   <div class="small muted">{{ t.gpa.1 }}</div>{% else %}<span class="muted">no grades</span>{% endif %}{% endwith %}
   {% if s.gpa is not None %}<div class="small">GPA {{ s.gpa }}/4</div>{% endif %}
-  {% if s.subject_grades %}<div class="small" title="{{ s.subject_grades|grades_text }}">{{ s.subject_grades|grades_text|truncatechars:short }}</div>{% endif %}
+  {% if s.subject_grades %}<div class="small" title="{{ s.subject_grades|grades_text }}"><b>Latest:</b> {{ s.subject_grades|grades_text|truncatechars:short }}</div>{% endif %}
+  {% if s.subject_grades_prev %}<div class="small" title="{{ s.subject_grades_prev|grades_text }}"><b>Year before:</b> {{ s.subject_grades_prev|grades_text|truncatechars:short }}</div>{% endif %}
+  {% if s.n_review %}<div><span class="badge required" title="The transcript reader was not confident: compare the grades with the files">Transcript: check by hand</span></div>{% endif %}
 {% elif col.kind == "s_perf" %}
   {% with t=s|transcript_levels %}
   <div>{% if t.rank.0 %}<span class="badge {% if t.rank.0 == 'top' %}optional{% elif t.rank.0 == 'middle' %}l2{% else %}required{% endif %}">{{ t.rank.1 }}</span>{% else %}<span class="muted">no class rank</span>{% endif %}</div>
   <div class="small">Relevant coursework: {% if t.coursework.0 %}<b>{{ t.coursework.0 }}</b> <span class="muted">{{ t.coursework.1 }}</span>{% else %}<span class="muted">{{ t.coursework.1 }}</span>{% endif %}</div>
   {% endwith %}
   {% if s.transcript_note %}<div class="small muted" title="{{ s.transcript_note }}">{{ s.transcript_note|truncatechars:short }}</div>{% endif %}
+  {% for note in s.attributes.transcript_read.notes %}<div class="small" title="Read from the transcript by the AI">Transcript: {{ note|truncatechars:short }}</div>{% endfor %}
 {% elif col.kind == "s_majors" %}
   {% if s.major_1 %}<div>1. {{ s.major_1 }}</div>{% endif %}{% if s.major_2 %}<div>2. {{ s.major_2 }}</div>{% endif %}{% if s.major_3 %}<div>3. {{ s.major_3 }}</div>{% endif %}
   {% if not s.major_1 and not s.major_2 and not s.major_3 %}<span class="muted">—</span>{% endif %}

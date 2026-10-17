@@ -20,6 +20,9 @@ lists change. Students see only the final %, and their {{ top_n }} best matches 
 {% if student %}
 <h2>{{ student_name|default:student.code }} <span class="muted small">{{ student.code }}</span></h2>
 <div class="small" style="margin-bottom:12px">
+  {% if student.attributes.ai_flags %}<div class="flag" style="margin-bottom:6px">Possible prompt injection: the student's
+  {{ student.attributes.ai_flags|join:", " }} read{% if student.attributes.ai_flags|length == 1 %}s{% endif %} like instructions to an AI. Check the ratings below
+  and set them by hand on the Students tab if needed.</div>{% endif %}
   {% if profile_read %}<details><summary><b>Profile rated by {{ profile_model }}</b> <span class="muted">(changed by hand on the Students tab, a rating is kept)</span></summary>
     <table style="width:auto; margin:4px 0"><tbody>{% for label, level, reason in profile_read %}<tr><td>{{ label }}</td><td><b>{{ level|default:"—" }}</b></td><td class="muted">{{ reason }}</td></tr>{% endfor %}</tbody></table>
   </details>

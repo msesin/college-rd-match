@@ -1,7 +1,7 @@
 """Transcript metrics from structured grades: GPA level, class-rank level and relevant coursework.
 
-Student.subject_grades holds the latest grade per subject on the school's own scale; the scale
-follows the curriculum:
+Student.subject_grades holds the latest year's grade per subject and Student.subject_grades_prev the year before
+(both count), on the school's own scale; the scale follows the curriculum:
     national ("No")  Ukrainian 12-point scale, 1-12
     IB               1-7 per subject, plus "Core (TOK/EE)": 0-3 bonus points
     A-levels         A*, A, B, C, D, E
@@ -19,6 +19,9 @@ IB_CORE = "core (tok/ee)"
 US_POINTS = {"A+": 4.0, "A": 4.0, "A-": 3.7, "B+": 3.3, "B": 3.0, "B-": 2.7, "C+": 2.3, "C": 2.0, "C-": 1.7,
              "D+": 1.3, "D": 1.0, "D-": 0.7, "F": 0.0}
 A_LEVEL_POINTS = {"A*": 6, "A": 5, "B": 4, "C": 3, "D": 2, "E": 1, "U": 0}
+# Ukrainian 12-point grade -> US 4.0 points, the conversion commonly used by Ukrainian applicants (proposal, decision 48).
+# An average between two whole grades is interpolated (10.5 -> 3.85).
+UA12_TO_US = {12: 4.0, 11: 4.0, 10: 3.7, 9: 3.3, 8: 3.0, 7: 2.7, 6: 2.3, 5: 2.0, 4: 1.7, 3: 1.0, 2: 0.7, 1: 0.0}
 
 # School subject -> subject group, by key words; the first match wins.
 SUBJECT_GROUPS = [
@@ -80,16 +83,54 @@ def _value(grade, sc):
 
 
 def graded(student):
-    """[(subject, grade as written, value)] without the IB core bonus; unreadable grades left out."""
+    """[(subject, grade as written, value)] for both years (latest first), without the IB core bonus; unreadable
+    grades left out."""
     sc = scale(student)
     out = []
-    for subject, grade in (student.subject_grades or {}).items():
-        if subject.strip().lower() == IB_CORE:
-            continue
-        v = _value(grade, sc)
-        if v is not None:
-            out.append((subject, grade, v))
+    for grades in (student.subject_grades or {}, getattr(student, "subject_grades_prev", None) or {}):
+        for subject, grade in grades.items():
+            if subject.strip().lower() == IB_CORE:
+                continue
+            v = _value(grade, sc)
+            if v is not None:
+                out.append((subject, grade, v))
     return out
+
+
+def ua12_to_us(average):
+    """A Ukrainian 12-point average -> US 4.0 scale (UA12_TO_US, interpolated)."""
+    average = max(1.0, min(12.0, average))
+    low = int(average)
+    if low >= 12:
+        return 4.0
+    return round(UA12_TO_US[low] + (UA12_TO_US[low + 1] - UA12_TO_US[low]) * (average - low), 2)
+
+
+def compute_gpa(grades_by_year, grading_scale):
+    """(gpa on 4.0 or None, note) from [{subject: grade}, ...] (several years) on one scale. Ukrainian 12-point: the
+    average out of 12 first, then converted; US letter grades: the 4.0 average. Other scales get no GPA."""
+    values = []
+    for grades in grades_by_year:
+        for subject, grade in (grades or {}).items():
+            if subject.strip().lower() != IB_CORE:
+                values.append(grade)
+    years = sum(1 for g in grades_by_year if g)
+    if grading_scale == "ua12":
+        nums = [float(v) for v in values if isinstance(v, (int, float)) or str(v).isdigit()]
+        nums = [v for v in nums if 1 <= v <= 12]
+        if not nums:
+            return None, ""
+        avg = sum(nums) / len(nums)
+        gpa = ua12_to_us(avg)
+        return gpa, (f"Average {avg:.2f} / 12 over {years} year{'s' if years != 1 else ''} ({len(nums)} grades), "
+                     f"converted to {gpa:.2f} / 4.0")
+    if grading_scale == "us":
+        points = [US_POINTS[str(v).upper()] for v in values if str(v).upper() in US_POINTS]
+        if not points:
+            return None, ""
+        gpa = round(sum(points) / len(points), 2)
+        return gpa, f"Unweighted average of {len(points)} letter grades over {years} year{'s' if years != 1 else ''}"
+    return None, ""
 
 
 # ---------------------------------------------------------------- GPA

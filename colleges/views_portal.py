@@ -5,7 +5,9 @@ middleware keeps students inside /portal/. After submitting, Gemini rates the pr
 (sources/student_ai.py, sample students only unless allowed); the match itself is computed here in code.
 """
 
+import hashlib
 import re
+import secrets
 from pathlib import Path
 
 from django import forms
@@ -25,12 +27,13 @@ from django.views.decorators.http import require_POST
 
 from colleges.forms import SubjectGradesField
 from colleges.models import College, CollegeChoice, CollegeProfile, Student, StudentFile, StudentIdentity
-from sources import accounts, demo, matching, student_ai
+from sources import accounts, college_ai, demo, matching, student_ai
 from sources.crypto import email_fingerprint, encrypt, normalise_email
 
 N_CHOICES = 20      # colleges a student can list (on the form and afterwards)
 N_RECOMMENDED = 12  # UGS college counseling recommends 12 at first; at least 12 to submit
-ALLOWED_UPLOADS = {".png", ".jpg", ".jpeg", ".pdf", ".heic", ".webp"}
+ALLOWED_UPLOADS = {".png", ".jpg", ".jpeg", ".pdf", ".heic", ".heif", ".webp"}
+OCR_RUNS_PER_DAY = 10   # "Autofill with a transcript" per student per day (each run may use the precise model)
 
 
 # ---------------------------------------------------------------- sign-up
@@ -147,13 +150,14 @@ def register_confirm(request, token):
 class PortalForm(forms.ModelForm):
     class Meta:
         model = Student
-        fields = ["pronouns", "school_name", "det_score", "sat_score", "curriculum", "subject_grades", "gpa", "gpa_note",
-                  "class_top_pct", "transcript_note", "major_1", "major_2", "major_3", "academic_note", "activities",
+        fields = ["pronouns", "school_name", "det_score", "sat_score", "curriculum", "subject_grades", "subject_grades_prev",
+                  "gpa", "gpa_note", "class_top_pct", "transcript_note", "major_1", "major_2", "major_3", "academic_note", "activities",
                   "work_experience", "self_summary"]
-        field_classes = {"subject_grades": SubjectGradesField}
+        field_classes = {"subject_grades": SubjectGradesField, "subject_grades_prev": SubjectGradesField}
         labels = {
             "pronouns": "Pronouns", "school_name": "Your school and its city", "det_score": "Duolingo English Test score", "sat_score": "SAT score (if you took it)",
-            "subject_grades": "Your grades by subject (latest year)",
+            "subject_grades": "Your grades by subject: latest school year",
+            "subject_grades_prev": "Your grades by subject: the school year before",
             "gpa": "GPA on a 4.0 scale (if you know it)", "gpa_note": "Your average grade as on your transcript",
             "class_top_pct": "Class rank: top what %?", "transcript_note": "Anything we should know about your grades",
             "major_1": "First choice of major", "major_2": "Second choice", "major_3": "Third choice",
@@ -217,6 +221,7 @@ def _shown(student):
         "det_score": text(student.det_score), "sat_score": text(student.sat_score),
         "curriculum": student.get_curriculum_display() if student.curriculum else "",
         "subject_grades": format_grades(student.subject_grades),
+        "subject_grades_prev": format_grades(student.subject_grades_prev),
         "gpa": text(student.gpa), "gpa_note": student.gpa_note,
         "class_top_pct": f"Top {student.class_top_pct:g}% of the class" if student.class_top_pct is not None else "",
         "transcript_note": student.transcript_note, "major_1": student.major_1, "major_2": student.major_2,
@@ -231,7 +236,7 @@ def _review_fields(form, student, reopen=()):
     curriculum = form.data.get("curriculum", "") if form.is_bound else student.curriculum
     required, shown = _required(curriculum), _shown(student)
     return {name: {"bf": form[name], "shown": shown[name], "empty": not shown[name], "required": name in required,
-                   "grades": list(student.subject_grades.items()) if name == "subject_grades" else None,
+                   "grades": list(getattr(student, name).items()) if name in ("subject_grades", "subject_grades_prev") else None,
                    "open": (not shown[name] and name in required) or name in reopen}
             for name in REVIEW_FIELDS}
 
@@ -259,25 +264,34 @@ def _refresh_matches(student):
 
 
 def _save_uploads(student, files):
-    errors = []
+    """Save uploaded transcript files: (errors, [StudentFile]). The file's content must be a photo or a PDF too,
+    not only its name."""
+    from sources.ocr import sniff_mime
+
+    errors, saved = [], []
     folder = settings.STUDENT_FILES_DIR / student.code
     for f in files:
         ext = Path(f.name).suffix.lower()
         if ext not in ALLOWED_UPLOADS:
             errors.append(f"{f.name}: only photos (PNG, JPG, HEIC, WEBP) and PDF files can be uploaded.")
             continue
+        head = f.read(16)
+        f.seek(0)
+        if sniff_mime(head + b"\0" * 16) is None:
+            errors.append(f"{f.name}: this file is not a photo or a PDF inside (try saving it again as PDF or JPG).")
+            continue
         if f.size > settings.STUDENT_UPLOAD_MAX_MB * 1024 * 1024:
             errors.append(f"{f.name}: larger than {settings.STUDENT_UPLOAD_MAX_MB} MB.")
             continue
         folder.mkdir(parents=True, exist_ok=True)
         safe = re.sub(r"[^A-Za-z0-9._-]", "_", Path(f.name).stem)[:60] + ext
-        stored = f"{timezone.now():%Y%m%d%H%M%S}_{safe}"
+        stored = f"{timezone.now():%Y%m%d%H%M%S}_{secrets.token_hex(3)}_{safe}"
         with open(folder / stored, "wb") as out:
             for chunk in f.chunks():
                 out.write(chunk)
-        StudentFile.objects.create(student=student, kind="transcript", file_path=f"{student.code}/{stored}",
-                                   original_name=f.name[:255])
-    return errors
+        saved.append(StudentFile.objects.create(student=student, kind="transcript", file_path=f"{student.code}/{stored}",
+                                                original_name=f.name[:255]))
+    return errors, saved
 
 
 def _colleges_for(student):
@@ -322,7 +336,7 @@ def portal(request):
             if request.FILES.getlist("transcripts"):
                 errors.append("Uploads are turned off in the demo; it already has a sample transcript.")
         else:
-            errors += _save_uploads(student, request.FILES.getlist("transcripts"))
+            errors += _save_uploads(student, request.FILES.getlist("transcripts"))[0]
 
         if action == "submit":
             data = form.data
@@ -377,6 +391,7 @@ def portal(request):
         "colleges": colleges.values(), "has_results": bool(student.submitted_at) and matching.latest_run(student) is not None,
         "n_choices": N_CHOICES, "n_recommended": N_RECOMMENDED, "n_minimum": min(N_RECOMMENDED, len(colleges)),
         "more_open": any(c for r, c in choice_rows if r > N_RECOMMENDED),
+        "autofill": student_ai.allowed(student) and college_ai.provider()[0] == "gemini",
         "my_list": [c.college for c in student.choices.select_related("college").order_by("rank")],
         "saved": request.GET.get("saved"), "max_mb": settings.STUDENT_UPLOAD_MAX_MB,
     })
@@ -474,6 +489,97 @@ def portal_list_change(request):
     from urllib.parse import urlencode
 
     return redirect("/portal/matches/" + (f"?{urlencode({'error': error})}" if error else ""))
+
+
+CURRICULUM_FOR_SCALE = {"ua12": "no", "ib": "ib", "alevels": "alevels", "us": "ap"}
+UNREADABLE = ("We could not read {names} reliably. Please upload it in a different format (a sharp photo taken "
+              "straight from above, a scan or a PDF), or type your grades in manually.")
+
+
+@require_POST
+def portal_transcript_autofill(request):
+    """"Autofill with a transcript": save the uploaded files, read them (sources/ocr.py: fast model, then the precise
+    one when needed), and answer with the grades for the two most recent years, the GPA and the class rank, for the
+    page to fill into the form. Nothing is saved to the profile here: the student checks the grades, then saves."""
+    from datetime import timedelta
+
+    from django.http import JsonResponse
+
+    from sources import ocr, transcript
+
+    student = _student(request)
+
+    def fail(message, files=()):
+        return JsonResponse({"ok": False, "error": message, "files": list(files)}, status=400)
+
+    if student.submitted_at:
+        return fail("Your application is already submitted.")
+    if demo.is_demo(student):
+        return fail("Reading transcripts is turned off in the demo.")
+    if college_ai.provider()[0] != "gemini" or not student_ai.allowed(student):
+        return fail("Reading transcripts automatically is not available yet. Please type your grades in.")
+    now = timezone.now()
+    runs = [t for t in (student.attributes or {}).get("ocr_runs", []) if t > (now - timedelta(days=1)).isoformat()]
+    if len(runs) >= OCR_RUNS_PER_DAY:
+        return fail(f"You have used the transcript reader {OCR_RUNS_PER_DAY} times today. Please type your grades in, "
+                    "or try again tomorrow.")
+    errors, saved = _save_uploads(student, request.FILES.getlist("transcripts"))
+    if errors:
+        return fail(" ".join(errors))
+    files = saved or list(student.files.filter(kind="transcript"))
+    if not files:
+        return fail("Please choose your transcript files first.")
+
+    base = settings.STUDENT_FILES_DIR.resolve()
+    to_read = []
+    for f in files:
+        path = (base / f.file_path).resolve()
+        if base not in path.parents or not path.exists():
+            continue
+        data = path.read_bytes()
+        sha = hashlib.sha256(data).hexdigest()
+        if f.ocr.get("sha256") == sha and f.ocr.get("status") in ("accepted", "needs_verification", "not_transcript"):
+            continue   # read before: the same file is never sent twice
+        mime = ocr.sniff_mime(data)
+        if mime is None:
+            f.ocr = {"sha256": sha, "status": "not_transcript", "problems": ["not a photo or a PDF"], "years": []}
+            f.save(update_fields=["ocr"])
+            continue
+        f.sha256 = sha
+        to_read.append((f, data, mime))
+    if to_read:
+        student.attributes = {**(student.attributes or {}), "ocr_runs": runs + [now.isoformat()]}
+        student.save(update_fields=["attributes", "updated_at"])
+        readings = ocr.read_files(to_read)
+        for f, _, _ in to_read:
+            f.ocr = readings[f.pk]
+            f.needs_verification = f.ocr.get("status") == "needs_verification"
+            f.save(update_fields=["ocr", "needs_verification", "sha256"])
+
+    summary = [{"name": f.original_name, "status": f.ocr.get("status")} for f in files]
+    merged = ocr.merge([f.ocr for f in files])
+    unread = [f.original_name for f in files if f.ocr.get("status") != "accepted"]
+    not_transcripts = [f.original_name for f in files if f.ocr.get("status") == "not_transcript"]
+    if not merged["latest"]:
+        if not_transcripts and len(not_transcripts) == len(files):
+            return fail(f"{', '.join(not_transcripts)} does not look like a transcript. Please upload your grades for "
+                        "the past 2 school years, or type them in manually.", summary)
+        return fail(UNREADABLE.format(names=", ".join(unread) or "your transcript"), summary)
+    gpa, gpa_note = transcript.compute_gpa([merged["latest"], merged["prev"]], merged["scale"])
+    student.attributes = {**(student.attributes or {}), "transcript_read": {
+        "labels": merged["labels"], "scale": merged["scale"], "notes": merged["notes"], "at": now.isoformat()}}
+    student.save(update_fields=["attributes", "updated_at"])
+    return JsonResponse({
+        "ok": True, "files": summary, "labels": merged["labels"],
+        "grades_latest": transcript.format_grades(merged["latest"]), "grades_prev": transcript.format_grades(merged["prev"]),
+        "gpa": f"{gpa:.2f}" if gpa is not None else "", "gpa_note": gpa_note,
+        "class_top_pct": merged["class_top_pct"], "curriculum": CURRICULUM_FOR_SCALE.get(merged["scale"], ""),
+        "warning": " ".join(filter(None, [
+            UNREADABLE.format(names=", ".join(unread)) if unread else "",
+            "Some files use a different grading scale and were left out: please upload transcripts from one school "
+            "system, or type the other grades in." if merged["other_scale"] else ""])),
+        "one_year": not merged["prev"],
+    })
 
 
 @require_POST
