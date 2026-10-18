@@ -85,7 +85,8 @@ DJANGO_SECRET_KEY=<a new long random string: python3 -c "import secrets; print(s
 DJANGO_DEBUG=0
 DJANGO_ALLOWED_HOSTS=dashboard.example.com
 DJANGO_CSRF_TRUSTED_ORIGINS=https://dashboard.example.com
-STUDENT_EMAIL_DOMAINS=<your organisation's email domain, e.g. yourorg.org: only these addresses can sign up>
+STUDENT_EMAIL_DOMAINS=<your organisation's email domain, e.g. yourorg.org: anyone with an address there can sign
+up, and only them; without it, only students whose email was added in the admin can>
 GEMINI_API_KEY=<same as on your laptop>
 GEMINI_MODEL=<same as on your laptop>
 GEMINI_MODEL_PRO=gemini-3.1-pro-preview

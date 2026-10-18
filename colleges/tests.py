@@ -1123,8 +1123,13 @@ class SetupWarningsTest(TestCase):
         with override_settings(ENV_FILE=env_file, STARTED_AT=time.time() + 60):
             with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "k", "ALLOW_STUDENT_DATA_TO_GEMINI": "0"}):
                 self.assertIn("off for real students", " ".join(gemini_warnings()))
-            with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "k", "ALLOW_STUDENT_DATA_TO_GEMINI": "1"}):
+            with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "k", "ALLOW_STUDENT_DATA_TO_GEMINI": "1",
+                                              "STUDENT_EMAIL_DOMAINS": ""}):
+                self.assertIn("only to students whose email was added", " ".join(gemini_warnings()))
+            with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "k", "ALLOW_STUDENT_DATA_TO_GEMINI": "1",
+                                              "STUDENT_EMAIL_DOMAINS": "ugs.foundation"}):
                 self.assertEqual(gemini_warnings(), [])
         with override_settings(ENV_FILE=env_file, STARTED_AT=time.time() - 60):   # .env newer than the start
-            with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "k", "ALLOW_STUDENT_DATA_TO_GEMINI": "1"}):
+            with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "k", "ALLOW_STUDENT_DATA_TO_GEMINI": "1",
+                                              "STUDENT_EMAIL_DOMAINS": "ugs.foundation"}):
                 self.assertIn("restart the site", " ".join(gemini_warnings()))

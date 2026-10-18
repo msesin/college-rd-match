@@ -126,6 +126,9 @@ def gemini_warnings():
     elif os.environ.get("ALLOW_STUDENT_DATA_TO_GEMINI") != "1":
         out.append("Gemini is off for real students (ALLOW_STUDENT_DATA_TO_GEMINI is not 1): their answers are not "
                    "rated, their transcripts are not read, and they do not see \"Autofill with a transcript\".")
+    if not os.environ.get("STUDENT_EMAIL_DOMAINS", "").strip():
+        out.append("Sign-up is open only to students whose email was added in the admin. To let anyone with your "
+                   "organisation's email sign up (and only them), set STUDENT_EMAIL_DOMAINS (e.g. ugs.foundation) in .env.")
     env = getattr(settings, "ENV_FILE", None)
     if env and env.exists() and env.stat().st_mtime > getattr(settings, "STARTED_AT", 0) + 2:
         changed = datetime.fromtimestamp(env.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
