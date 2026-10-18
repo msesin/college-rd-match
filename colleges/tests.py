@@ -906,8 +906,11 @@ class TranscriptOcrTest(TestCase):
         self.assertLess(r["confidence"], ocr.THRESHOLD)
         shifted = reading(1.0, column=["10", "11"])                       # the column disagrees with the rows
         self.assertLess(ocr.check(shifted)[0]["confidence"], ocr.THRESHOLD)
-        empty = reading(1.0, grades=(("Алгебра", "Algebra", None), ("Фізика", "Physics", "10")))
-        self.assertLess(ocr.check(empty)[0]["confidence"], ocr.THRESHOLD)  # printed with a blank: check the rows
+        shifted_off = reading(1.0, grades=(("Алгебра", "Algebra", "12"), ("Фізика", "Physics", "11"), ("Хімія", "Chemistry", None)))
+        self.assertLess(ocr.check(shifted_off)[0]["confidence"], ocr.THRESHOLD)  # one blank, last row: read one off?
+        not_taught = reading(1.0, grades=(("Алгебра", "Algebra", "12"), ("Астрономія", "Astronomy", None),
+                                          ("Фізика", "Physics", "11"), ("Право", "Law", None), ("Хімія", "Chemistry", "10")))
+        self.assertEqual(ocr.check(not_taught)[0]["confidence"], 1.0)     # scattered blanks: subjects not taught
         hand = reading(1.0, handwritten=True, grades=(("Нім. мова", "German language", None), ("Фізика", "Physics", "10")))
         self.assertEqual(ocr.check(hand)[0]["confidence"], 1.0)           # handwritten blanks/strikes are normal
 
@@ -920,6 +923,26 @@ class TranscriptOcrTest(TestCase):
         self.assertTrue(ocr.check(sneaky)[0]["contains_instructions"])  # caught by the code even if the model is not
         self.assertFalse(ocr.check(reading(1.0, grades=(("Religious instruction", "Religious instruction", "11"),)))[0]
                          ["contains_instructions"])                     # a real subject is not an injection
+
+    def test_files_failed_under_older_checks_are_read_again(self):
+        from sources import ocr
+
+        user = User.objects.create_user("reread")
+        st = Student.objects.create(user=user, cohort="sample")
+        folder = __import__("pathlib").Path(TMP) / st.code
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "t.png").write_bytes(PNG)
+        sha = __import__("hashlib").sha256(PNG).hexdigest()
+        f = StudentFile.objects.create(student=st, file_path=f"{st.code}/t.png", original_name="t.png",
+                                       ocr={"sha256": sha, "status": "needs_verification", "version": 1})
+        with override_settings(STUDENT_FILES_DIR=__import__("pathlib").Path(TMP)):
+            self.assertEqual(len(ocr.pending_files(st)), 1)                  # failed under the old checks: again
+            f.ocr = {"sha256": sha, "status": "needs_verification", "version": ocr.VERSION}
+            f.save()
+            self.assertEqual(ocr.pending_files(st), [])                      # same checks: not sent twice
+            f.ocr = {"sha256": sha, "status": "accepted", "version": 1}
+            f.save()
+            self.assertEqual(ocr.pending_files(st), [])                      # accepted readings are kept
 
     def test_not_a_transcript_skips_the_precise_model(self):
         r, calls = self.run_tiers(reading(0.6, transcript=False, grades=()))

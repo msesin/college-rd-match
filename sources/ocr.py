@@ -33,6 +33,7 @@ from django.utils import timezone
 log = logging.getLogger(__name__)
 
 THRESHOLD = 0.95
+VERSION = 2   # the checks below; a file that failed under older checks is read again (version 2: blank cells)
 MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".pdf": "application/pdf",
         ".heic": "image/heic", ".heif": "image/heif", ".webp": "image/webp"}
 SCALES = ["ua12", "us", "ib", "alevels", "other"]
@@ -166,8 +167,12 @@ def check(data):
             problems.append(f"{_clean(y.get('label'), 30)}: the grades read down the column do not match the subject rows")
         elif column and len(column) != len(paired):
             problems.append(f"{_clean(y.get('label'), 30)}: {len(column)} grades in the column for {len(paired)} subjects")
-        if not data.get("is_handwritten") and any(g is None for g in paired):
-            problems.append(f"{_clean(y.get('label'), 30)}: a printed transcript with an empty grade (check the rows)")
+        # A row shift (a tilted photo read one row off) leaves exactly one grade missing, in the first or the last
+        # row. Blanks elsewhere are normal: tables often list every subject for every year, blank where not taught.
+        blanks = [i for i, g in enumerate(paired) if g is None]
+        if not data.get("is_handwritten") and len(paired) > 2 and len(blanks) == 1 and blanks[0] in (0, len(paired) - 1):
+            problems.append(f"{_clean(y.get('label'), 30)}: the only missing grade is in the "
+                            f"{'first' if blanks[0] == 0 else 'last'} row (were the rows read one off?)")
         level = y.get("grade_level")
         years.append({"label": _clean(y.get("label"), 30), "grade_level": level if isinstance(level, int) else None,
                       "subjects": subjects})
@@ -228,11 +233,12 @@ def read(data, mime, client=None):
     "not_transcript", "error"), stage, models, confidence, grades by year, class rank, performance, problems."""
     client = client or make_client()
     sha = hashlib.sha256(data).hexdigest()
-    base = {"sha256": sha, "read_at": timezone.now().isoformat(timespec="seconds"), "models": [], "tokens": []}
+    base = {"sha256": sha, "read_at": timezone.now().isoformat(timespec="seconds"), "version": VERSION, "models": [],
+            "tokens": [], "raw": {}}   # raw: Gemini's own answers, so the checks can be redone without asking again
     try:
         raw, tokens = _ask(client, fast_model(), data, mime, precise=False)
         first, problems = check(raw)
-        base["models"].append(fast_model()); base["tokens"].append(tokens)
+        base["models"].append(fast_model()); base["tokens"].append(tokens); base["raw"]["fast"] = raw
         no_grades = not any(s["grade"] for y in first["years"] for s in y["subjects"])
         if not first["is_transcript"] and (first["confidence"] >= THRESHOLD or no_grades):
             return {**base, **first, "status": "not_transcript", "stage": "fast"}   # no point asking the precise model
@@ -247,7 +253,7 @@ def read(data, mime, client=None):
             return {**base, **first, "status": "needs_verification", "stage": "fast", "stage1": stage1,
                     "error": f"precise model unavailable ({type(exc).__name__})"}
         second, problems = check(raw)
-        base["models"].append(pro_model()); base["tokens"].append(tokens)
+        base["models"].append(pro_model()); base["tokens"].append(tokens); base["raw"]["precise"] = raw
         if not second["is_transcript"] and second["confidence"] >= THRESHOLD:
             status = "not_transcript"
         elif second["confidence"] >= THRESHOLD and not problems:
@@ -329,8 +335,10 @@ def pending_files(student, files=None):
             continue
         data = path.read_bytes()
         sha = hashlib.sha256(data).hexdigest()
-        if (f.ocr or {}).get("sha256") == sha and f.ocr.get("status") in ("accepted", "needs_verification", "not_transcript"):
-            continue   # read before: the same file is never sent twice
+        done = f.ocr or {}
+        if done.get("sha256") == sha and (done.get("status") == "accepted" or (
+                done.get("status") in ("needs_verification", "not_transcript") and done.get("version") == VERSION)):
+            continue   # read before: the same file is not sent twice (unless it failed under older checks)
         mime = sniff_mime(data)
         if mime is None:
             f.ocr = {"sha256": sha, "status": "not_transcript", "problems": ["not a photo or a PDF"], "years": []}

@@ -132,8 +132,10 @@ HEIC; photo, scan or screenshot; Ukrainian or English; printed or handwritten) i
 
 The model's own confidence is not enough (in tests it said 0.95 for a photo it had read one row off), so the code
 checks too, and any problem caps the confidence below 0.95: every grade must fit its scale; each year's grades read
-straight down the column must match the subject rows; a printed transcript with a blank grade is checked again; text
-addressed to an AI is flagged. Empty or struck-through cells are null. The two most recent years fill the form (one
+straight down the column must match the subject rows; in a printed transcript, a year whose only missing grade is in
+the first or last row is checked again (a row read one off; blanks elsewhere are normal, for subjects not taught that
+year); text addressed to an AI is flagged. Gemini's raw answers are kept with each reading; a file that failed under
+older checks is read again the next time. Empty or struck-through cells are null. The two most recent years fill the form (one
 grading scale only); the GPA is the average out of 12 converted to 4.0 (12 and 11 = 4.0, 10 = 3.7, 9 = 3.3, 8 = 3.0,
 7 = 2.7 ... interpolated; *proposal*), or the 4.0 average of US letter grades. Nothing is saved until the student
 checks the grades and saves. A file already read is never sent again; at most 10 autofill runs per student per day.
