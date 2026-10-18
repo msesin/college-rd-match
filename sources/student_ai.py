@@ -257,6 +257,31 @@ def judge_vibe(student, client, model, limiter=None, waits=None):
 
 # ---------------------------------------------------------------- after a student submits
 
+def process_on_submit(student):
+    """On submit, before the match: read the transcript files that were not read yet (sources/ocr.py; grade answers
+    left empty are filled from them) and rate the student's texts (rate_now), at the same time. Takes about 10
+    seconds, up to a minute when a transcript needs the precise model. Returns True when the ratings are done."""
+    import logging
+    from concurrent.futures import ThreadPoolExecutor
+
+    from django.conf import settings
+
+    from sources import college_ai, ocr
+
+    if not getattr(settings, "STUDENT_AI_ON_SUBMIT", True) or college_ai.provider()[0] != "gemini" or not allowed(student):
+        return False
+    to_read = ocr.pending_files(student)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        reading = pool.submit(ocr.read_files, to_read) if to_read else None   # the transcripts, meanwhile...
+        rated = rate_now(student)                                              # ...the ratings, here
+        readings = reading.result() if reading else {}
+    try:
+        ocr.finish(student, to_read, readings)
+    except Exception:
+        logging.getLogger(__name__).exception("Saving transcript readings failed for %s", student.code)
+    return rated
+
+
 def rate_now(student):
     """On submit: ask Gemini for the missing ratings (profile, self-summary vs college vibes) right away, so the
     first match already uses them (about 10 seconds). Returns True when nothing is left to rate; False when skipped

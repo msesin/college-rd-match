@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -20,6 +21,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Secrets live in .env (git-ignored; template: .env.example).
 load_dotenv(BASE_DIR / ".env")
+ENV_FILE = BASE_DIR / ".env"
+STARTED_AT = time.time()   # .env is read once, here: staff pages warn when it changed after this (restart needed)
 
 # All private data (college files, student exports, the database) lives in data/, which is git-ignored.
 DATA_DIR = BASE_DIR / "data"

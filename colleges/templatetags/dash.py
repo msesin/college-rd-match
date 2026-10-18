@@ -1,3 +1,5 @@
+import os
+
 from django import template
 
 register = template.Library()
@@ -108,3 +110,25 @@ def demo_user(context):
 
     request = context.get("request")
     return bool(request and request.user.is_authenticated and request.user.username == DEMO_USERNAME)
+
+
+@register.simple_tag
+def gemini_warnings():
+    """Why Gemini may be silently off, for staff pages: no key, real students not allowed, or .env changed after
+    the site started (Django reads .env only at start)."""
+    from datetime import datetime
+
+    from django.conf import settings
+
+    out = []
+    if not os.environ.get("GEMINI_API_KEY"):
+        out.append("No Gemini key: students' answers are not rated and transcripts are not read.")
+    elif os.environ.get("ALLOW_STUDENT_DATA_TO_GEMINI") != "1":
+        out.append("Gemini is off for real students (ALLOW_STUDENT_DATA_TO_GEMINI is not 1): their answers are not "
+                   "rated, their transcripts are not read, and they do not see \"Autofill with a transcript\".")
+    env = getattr(settings, "ENV_FILE", None)
+    if env and env.exists() and env.stat().st_mtime > getattr(settings, "STARTED_AT", 0) + 2:
+        changed = datetime.fromtimestamp(env.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+        out.append(f".env was changed ({changed}) after the site started, so the change is not in use yet: restart "
+                   "the site (on the server: sudo systemctl restart ugs).")
+    return out

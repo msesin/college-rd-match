@@ -356,6 +356,7 @@ class PortalFlowTest(TestCase):
         with mock.patch.dict(os.environ, env), override_settings(STUDENT_AI_ON_SUBMIT=True), \
                 mock.patch("sources.college_ai.make_client"), \
                 mock.patch("sources.college_ai._call_gemini", side_effect=fake_gemini), \
+                mock.patch("sources.ocr.read_files", return_value={}), \
                 mock.patch("sources.student_ai.rate_in_background") as background:
             self.client.post("/portal/", self._complete_form(list(College.objects.order_by("unitid")[:12])))
         self.student.refresh_from_db()
@@ -375,6 +376,7 @@ class PortalFlowTest(TestCase):
         with mock.patch.dict(os.environ, env), override_settings(STUDENT_AI_ON_SUBMIT=True), \
                 mock.patch("sources.college_ai.make_client"), \
                 mock.patch("sources.college_ai._call_gemini", side_effect=RuntimeError("Gemini is down")), \
+                mock.patch("sources.ocr.read_files", return_value={}), \
                 mock.patch("sources.student_ai.rate_in_background") as background, \
                 self.assertLogs("sources.student_ai", "ERROR"):
             r = self.client.post("/portal/", self._complete_form(list(College.objects.order_by("unitid")[:12])))
@@ -633,11 +635,14 @@ class MatchingEngineTest(TestCase):
         self.assertEqual(self.m.character_metric(None).score, 0.5)
         j = VibeJudgement.objects.create(student=st, college=self.college, level="high", reason="fits", model="m")
         self.assertEqual(self.m.character_metric(j).score, 1.0)
-        self.assertFalse(student_ai.allowed(st))  # real students are not sent to Gemini by default
-        with self.assertRaises(PermissionError):
-            student_ai.rate_profile(st, client=None, model="m")
-        with self.assertRaises(PermissionError):
-            student_ai.judge_vibe(st, client=None, model="m")
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"ALLOW_STUDENT_DATA_TO_GEMINI": "0"}):   # whatever the laptop's .env says
+            self.assertFalse(student_ai.allowed(st))  # real students are not sent to Gemini by default
+            with self.assertRaises(PermissionError):
+                student_ai.rate_profile(st, client=None, model="m")
+            with self.assertRaises(PermissionError):
+                student_ai.judge_vibe(st, client=None, model="m")
         st.cohort = "sample"
         self.assertTrue(student_ai.allowed(st))
 
@@ -955,14 +960,15 @@ class TranscriptAutofillTest(TestCase):
         self.st = Student.objects.create(user=self.user, cohort="sample", pronouns="she")
         self.client.force_login(self.user)
 
-    def post(self, files, answer=None, precise=None):
+    def post(self, files, answer=None, precise=None, allow="0"):
         from unittest import mock
 
         precise_answer = precise
 
         def ask(client, model, data, mime, precise):
             return (precise_answer if precise else answer), {"in": 1, "out": 1}
-        with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}), mock.patch("sources.ocr.make_client"), \
+        env = {"GEMINI_API_KEY": "test-key", "ALLOW_STUDENT_DATA_TO_GEMINI": allow}   # not the laptop's .env
+        with mock.patch.dict(os.environ, env), mock.patch("sources.ocr.make_client"), \
                 mock.patch("sources.ocr._ask", side_effect=ask) as asked:
             r = self.client.post("/portal/transcript/autofill/", {"transcripts": files}, HTTP_ACCEPT="application/json")
         return r, asked.call_count
@@ -1009,3 +1015,89 @@ def timezone_now_iso():
     from django.utils import timezone
 
     return timezone.now().isoformat()
+
+
+@override_settings(STUDENT_FILES_DIR=__import__("pathlib").Path(TMP), ALLOWED_HOSTS=["testserver"], STUDENT_AI_ON_SUBMIT=True)
+class SubmitWithTranscriptTest(TestCase):
+    """On submit: the transcript uploaded with the form is read, empty grade answers are filled, the texts are rated,
+    and the first match uses all of it."""
+
+    def setUp(self):
+        for i in range(12):
+            c = College.objects.create(unitid=400000 + i, name=f"Submit College {i:02d}", list_name=f"S{i}", city="X", state="MA")
+            CollegeProfile.objects.create(college=c, test_policy="optional", student_body="coed")
+        self.user = User.objects.create_user("submitter", password=STUDENT_PASSWORD)
+        self.st = Student.objects.create(user=self.user, cohort="2026-27", pronouns="she", det_score=140, curriculum="no",
+                                         school_name="Lyceum No. 1, Kyiv", major_1="Economics", activities="Debate club.",
+                                         self_summary="Curious and kind.")
+        for rank in range(12):
+            CollegeChoice.objects.create(student=self.st, college_id=400000 + rank, rank=rank + 1)
+        self.client.force_login(self.user)
+
+    def test_transcript_read_and_ratings_on_submit(self):
+        import json
+        from unittest import mock
+
+        from sources import matching, student_ai
+
+        def fake_rating(client, model, prompt, schema, waits=None):
+            if schema is student_ai.PROFILE_SCHEMA:
+                return json.dumps({k: {"level": v, "reason": "t"} for k, v in {"school_type": "top_ua", "talent": "strong",
+                                   "extracurricular": "high", "volunteer": "low", "work": "low"}.items()}), {}, model
+            return json.dumps({"traits": [], "standout": "", "judgements": [
+                {"unitid": c.unitid, "level": "moderate", "reason": "t"} for c in College.objects.all()]}), {}, model
+
+        answer = reading(0.99, labels=("2023-2024", "2024-2025"))
+        env = {"GEMINI_API_KEY": "test-key", "ALLOW_STUDENT_DATA_TO_GEMINI": "1"}
+        with mock.patch.dict(os.environ, env), mock.patch("sources.college_ai.make_client"), \
+                mock.patch("sources.college_ai._call_gemini", side_effect=fake_rating), \
+                mock.patch("sources.ocr.make_client"), mock.patch("sources.ocr._ask", return_value=(answer, {})):
+            page = self.client.get("/portal/").content.decode()
+            self.assertIn("Autofill with a transcript", page)                       # shown when Gemini is on
+            data = {**FormValues(page).data, "action": "submit",
+                    "transcripts": SimpleUploadedFile("t.png", PNG, content_type="image/png")}
+            r = self.client.post("/portal/", data)
+        self.assertRedirects(r, "/portal/matches/?submitted=1", fetch_redirect_response=False)
+        self.st.refresh_from_db()
+        self.assertEqual(self.st.files.get().ocr["status"], "accepted")             # the uploaded file was read
+        self.assertEqual((self.st.subject_grades, self.st.subject_grades_prev),     # empty answers filled
+                         ({"Algebra": 11, "Physics": 10}, {"Algebra": 11, "Physics": 10}))
+        self.assertEqual((float(self.st.gpa), self.st.class_top_pct), (3.85, 10.0))
+        self.assertEqual((self.st.academic_tier, self.st.ec_level), ("strong", "high"))   # rated
+        details = matching.latest_run(self.st).results.filter(excluded=False).first().details
+        levels = {m["key"]: m["level"] for m in details["metrics"]}
+        self.assertNotIn("not rated", levels["talent"])
+        self.assertNotEqual(levels["gpa"], "no grades")                              # the match used the transcript
+
+    def test_typed_grades_are_never_replaced(self):
+        from unittest import mock
+
+        from sources import ocr
+
+        self.st.subject_grades = {"Algebra": 9}
+        self.st.save()
+        StudentFile.objects.create(student=self.st, file_path="x/none.png",
+                                   ocr={**ocr.check(reading(1.0))[0], "status": "accepted"})
+        filled, _ = ocr.fill_empty(self.st)
+        self.assertNotIn("subject_grades", filled)
+        self.assertEqual(self.st.subject_grades, {"Algebra": 9})
+
+
+class SetupWarningsTest(TestCase):
+    def test_staff_see_why_gemini_is_off(self):
+        import pathlib
+        import time
+        from unittest import mock
+
+        from colleges.templatetags.dash import gemini_warnings
+
+        env_file = pathlib.Path(tempfile.mkdtemp()) / ".env"
+        env_file.write_text("x")
+        with override_settings(ENV_FILE=env_file, STARTED_AT=time.time() + 60):
+            with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "k", "ALLOW_STUDENT_DATA_TO_GEMINI": "0"}):
+                self.assertIn("off for real students", " ".join(gemini_warnings()))
+            with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "k", "ALLOW_STUDENT_DATA_TO_GEMINI": "1"}):
+                self.assertEqual(gemini_warnings(), [])
+        with override_settings(ENV_FILE=env_file, STARTED_AT=time.time() - 60):   # .env newer than the start
+            with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "k", "ALLOW_STUDENT_DATA_TO_GEMINI": "1"}):
+                self.assertIn("restart the site", " ".join(gemini_warnings()))

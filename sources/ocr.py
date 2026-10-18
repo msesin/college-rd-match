@@ -312,3 +312,91 @@ def merge(readings):
     return {"latest": ordered[0]["grades"] if ordered else {}, "prev": ordered[1]["grades"] if len(ordered) > 1 else {},
             "labels": [y["label"] for y in ordered[:2]], "scale": scale, "class_top_pct": rank, "notes": notes,
             "other_scale": len(other_scale)}
+
+
+# ---------------------------------------------------------------- a student's transcript files
+
+def pending_files(student, files=None):
+    """[(StudentFile, bytes, mime)] of the student's transcript files that were not read yet (or changed since).
+    Files that are not a photo or a PDF inside are marked as such and left out."""
+    from django.conf import settings
+
+    base = settings.STUDENT_FILES_DIR.resolve()
+    out = []
+    for f in (files if files is not None else student.files.filter(kind="transcript")):
+        path = (base / f.file_path).resolve()
+        if base not in path.parents or not path.exists():
+            continue
+        data = path.read_bytes()
+        sha = hashlib.sha256(data).hexdigest()
+        if (f.ocr or {}).get("sha256") == sha and f.ocr.get("status") in ("accepted", "needs_verification", "not_transcript"):
+            continue   # read before: the same file is never sent twice
+        mime = sniff_mime(data)
+        if mime is None:
+            f.ocr = {"sha256": sha, "status": "not_transcript", "problems": ["not a photo or a PDF"], "years": []}
+            f.save(update_fields=["ocr"])
+            continue
+        f.sha256 = sha
+        out.append((f, data, mime))
+    return out
+
+
+def store(to_read, readings):
+    """Save each file's reading; unsure ones go to the counselors' review queue."""
+    for f, _, _ in to_read:
+        if f.pk not in readings:   # not read (should not happen): leave it unread, it is tried again next time
+            continue
+        f.ocr = readings[f.pk]
+        f.needs_verification = f.ocr.get("status") == "needs_verification"
+        f.save(update_fields=["ocr", "needs_verification", "sha256"])
+
+
+CURRICULUM_FOR_SCALE = {"ua12": "no", "ib": "ib", "alevels": "alevels", "us": "ap"}
+
+
+def fill_empty(student, files=None):
+    """Fill the grade answers the student left empty (both years, GPA, class rank, curriculum) from the accepted
+    readings of their transcript files; what the student typed is never replaced. Returns the fields filled."""
+    from sources import transcript
+
+    files = list(files if files is not None else student.files.filter(kind="transcript"))
+    merged = merge([f.ocr or {} for f in files])
+    filled = []
+    if merged["latest"] and not student.subject_grades:
+        student.subject_grades, _ = merged["latest"], filled.append("subject_grades")
+    if merged["prev"] and not student.subject_grades_prev:
+        student.subject_grades_prev, _ = merged["prev"], filled.append("subject_grades_prev")
+    if not student.curriculum and CURRICULUM_FOR_SCALE.get(merged["scale"]):
+        student.curriculum, _ = CURRICULUM_FOR_SCALE[merged["scale"]], filled.append("curriculum")
+    if student.gpa is None and merged["latest"]:
+        gpa, note = transcript.compute_gpa([student.subject_grades, student.subject_grades_prev], merged["scale"])
+        if gpa is not None:
+            student.gpa, _ = gpa, filled.append("gpa")
+            if not student.gpa_note:
+                student.gpa_note, _ = note[:300], filled.append("gpa_note")
+    if student.class_top_pct is None and merged["class_top_pct"] is not None:
+        student.class_top_pct, _ = merged["class_top_pct"], filled.append("class_top_pct")
+    if filled:
+        student.save(update_fields=filled + ["updated_at"])
+    return filled, merged
+
+
+def read_student(student):
+    """Read the student's unread transcript files (one request each, in parallel) and fill their empty grade
+    answers. Returns (files read, fields filled)."""
+    to_read = pending_files(student)
+    return len(to_read), finish(student, to_read, read_files(to_read) if to_read else {})
+
+
+def finish(student, to_read, readings):
+    """Save the readings, fill the grade answers left empty, keep the transcript notes. Returns the fields filled."""
+    if to_read:
+        store(to_read, readings)
+    filled, merged = fill_empty(student)
+    if merged["notes"]:
+        student.refresh_from_db(fields=["attributes"])
+        student.attributes = {**(student.attributes or {}), "transcript_read": {
+            "labels": merged["labels"], "scale": merged["scale"], "notes": merged["notes"],
+            "at": timezone.now().isoformat()}}
+        student.save(update_fields=["attributes", "updated_at"])
+    return filled

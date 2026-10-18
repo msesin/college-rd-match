@@ -131,6 +131,8 @@ Range empty) in the subnet's Security List or in a network security group on the
 - Daily backups: `crontab -e`, add `30 3 * * * /home/<user>/ugs-rd-matching/deploy/backup.sh`. Backups go to
   `~/ugs-backups` on the same machine, so also copy them off it now and then (`scp` to your laptop).
 - Oracle can reclaim idle Always Free instances. Keep the backups somewhere else too.
+- After every change to `.env`, restart the site (`sudo systemctl restart ugs`): Django reads `.env` only when it
+  starts. Staff pages show a yellow warning while a change is not in use yet, or while Gemini is off for real students.
 - Public demo login (`demo`, password in README.md): run `create_sample_students` once, then reset it every hour so
   visitors' changes do not last: `crontab -e`, add
   `5 * * * * cd /home/<user>/ugs-rd-matching && .venv/bin/python manage.py create_sample_students --demo-only > /dev/null`.

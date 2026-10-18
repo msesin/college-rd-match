@@ -372,7 +372,7 @@ def portal(request):
                 # Gemini rates the student's texts first, so the first match uses the ratings (about 10 seconds).
                 # If it is skipped or fails, results come right away and a background retry updates them later.
                 # Not for the public demo: its saved ratings are used as they are.
-                rated = not demo.is_demo(student) and student_ai.rate_now(student)
+                rated = not demo.is_demo(student) and student_ai.process_on_submit(student)
                 refresh = _refresh_matches(student)
                 if not rated and not demo.is_demo(student):
                     student_ai.rate_in_background(student, then=refresh)
@@ -491,7 +491,6 @@ def portal_list_change(request):
     return redirect("/portal/matches/" + (f"?{urlencode({'error': error})}" if error else ""))
 
 
-CURRICULUM_FOR_SCALE = {"ua12": "no", "ib": "ib", "alevels": "alevels", "us": "ap"}
 UNREADABLE = ("We could not read {names} reliably. Please upload it in a different format (a sharp photo taken "
               "straight from above, a scan or a PDF), or type your grades in manually.")
 
@@ -530,31 +529,11 @@ def portal_transcript_autofill(request):
     if not files:
         return fail("Please choose your transcript files first.")
 
-    base = settings.STUDENT_FILES_DIR.resolve()
-    to_read = []
-    for f in files:
-        path = (base / f.file_path).resolve()
-        if base not in path.parents or not path.exists():
-            continue
-        data = path.read_bytes()
-        sha = hashlib.sha256(data).hexdigest()
-        if f.ocr.get("sha256") == sha and f.ocr.get("status") in ("accepted", "needs_verification", "not_transcript"):
-            continue   # read before: the same file is never sent twice
-        mime = ocr.sniff_mime(data)
-        if mime is None:
-            f.ocr = {"sha256": sha, "status": "not_transcript", "problems": ["not a photo or a PDF"], "years": []}
-            f.save(update_fields=["ocr"])
-            continue
-        f.sha256 = sha
-        to_read.append((f, data, mime))
+    to_read = ocr.pending_files(student, files)
     if to_read:
         student.attributes = {**(student.attributes or {}), "ocr_runs": runs + [now.isoformat()]}
         student.save(update_fields=["attributes", "updated_at"])
-        readings = ocr.read_files(to_read)
-        for f, _, _ in to_read:
-            f.ocr = readings[f.pk]
-            f.needs_verification = f.ocr.get("status") == "needs_verification"
-            f.save(update_fields=["ocr", "needs_verification", "sha256"])
+        ocr.store(to_read, ocr.read_files(to_read))
 
     summary = [{"name": f.original_name, "status": f.ocr.get("status")} for f in files]
     merged = ocr.merge([f.ocr for f in files])
@@ -573,7 +552,7 @@ def portal_transcript_autofill(request):
         "ok": True, "files": summary, "labels": merged["labels"],
         "grades_latest": transcript.format_grades(merged["latest"]), "grades_prev": transcript.format_grades(merged["prev"]),
         "gpa": f"{gpa:.2f}" if gpa is not None else "", "gpa_note": gpa_note,
-        "class_top_pct": merged["class_top_pct"], "curriculum": CURRICULUM_FOR_SCALE.get(merged["scale"], ""),
+        "class_top_pct": merged["class_top_pct"], "curriculum": ocr.CURRICULUM_FOR_SCALE.get(merged["scale"], ""),
         "warning": " ".join(filter(None, [
             UNREADABLE.format(names=", ".join(unread)) if unread else "",
             "Some files use a different grading scale and were left out: please upload transcripts from one school "

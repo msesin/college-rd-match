@@ -25,7 +25,7 @@ from sources import college_ai, matching, student_ai
 
 
 class Command(BaseCommand):
-    help = "Ask Gemini for missing ratings, then refresh students' match results"
+    help = "Ask Gemini for missing ratings and read unread transcripts, then refresh students' match results"
 
     def add_arguments(self, parser):
         parser.add_argument("--sample", action="store_true", help="Run for the fictional sample students")
@@ -71,6 +71,14 @@ class Command(BaseCommand):
             if not student_ai.allowed(st):
                 self.stdout.write(f"{st.code}: not sent to Gemini (real student; ALLOW_STUDENT_DATA_TO_GEMINI not set)")
                 continue
+            if st.submitted_at and st.cohort != "sample":   # transcripts not read yet (e.g. submitted while it was off)
+                from sources import ocr
+
+                n, filled = ocr.read_student(st)
+                if n:
+                    statuses = [f.ocr.get("status") for f in st.files.filter(kind="transcript")]
+                    self.stdout.write(f"{st.code}: read {n} transcript file(s): {', '.join(statuses)}"
+                                      + (f"; filled {', '.join(filled)}" if filled else ""))
             if rejudge or student_ai.profile_needs_rating(st, model):
                 read = student_ai.rate_profile(st, client, model, limiter)
                 self.stdout.write(f"{st.code}: " + "; ".join(f"{k} {v['level']}" for k, v in read.items()))

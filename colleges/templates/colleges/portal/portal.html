@@ -199,15 +199,14 @@ right, press <b>Submit</b> at the bottom; you can submit without changing anythi
 
 <div class="card" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
   <button class="primary" name="action" value="submit" id="submit-button" onclick="return confirm('Submit your form? You will not be able to change it afterwards.')">Submit</button>
-  <span class="small muted" id="submit-wait" hidden>Submitting. We are reading your answers to work out your matches: this takes
-  about 10 seconds, please keep this page open.</span>
+
   <button class="secondary" name="action" value="save">Save changes and finish later</button>
 </div>
 </form>
 {% for f in files %}<form id="del-{{ f.pk }}" method="post" action="{% url 'portal_file_delete' f.pk %}">{% csrf_token %}</form>{% endfor %}
 <div class="loading" id="autofill-loading" hidden><div class="loading-box"><div class="spinner"></div>
-  <b>Reading your transcript…</b><div class="small muted">This takes a few seconds, up to a minute for handwritten pages.
-  Please keep this page open.</div></div></div>
+  <b id="loading-title">Reading your transcript…</b><div class="small muted" id="loading-text">This takes a few seconds, up
+  to a minute for handwritten pages. Please keep this page open.</div></div></div>
 <script>
   // "Autofill with a transcript": send the chosen files, show the loading screen, then fill the grades in (opened, so
   // the student sees and checks them). Nothing is saved until the student saves the form.
@@ -259,7 +258,10 @@ right, press <b>Submit</b> at the bottom; you can submit without changing anythi
   const submitButton = document.getElementById('submit-button');
   if (submitButton) submitButton.form.addEventListener('submit', e => {
     if (e.submitter !== submitButton) return;
-    document.getElementById('submit-wait').hidden = false;
+    document.getElementById('loading-title').textContent = 'Submitting your application…';
+    document.getElementById('loading-text').textContent = 'We are reading your transcript and your answers to work out ' +
+      'your matches. This can take up to a minute: please keep this page open.';
+    document.getElementById('autofill-loading').hidden = false;
     setTimeout(() => submitButton.form.querySelectorAll('button').forEach(b => b.disabled = true), 0);
   });
 

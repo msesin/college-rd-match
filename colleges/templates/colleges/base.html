@@ -1,4 +1,4 @@
-<!doctype html>
+{% load dash %}<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -17,6 +17,7 @@
   header nav a { margin-right:14px; color:var(--ink); text-decoration:none; }
   header nav a.on { color:var(--accent); font-weight:600; }
   main { padding:16px 20px 40px; }
+  .setup-warning { background:#fff6e8; color:#7a3e00; border-bottom:1px solid #f3d9b1; padding:8px 20px; font-size:13px; }
   .usermenu { margin-left:auto; position:relative; cursor:default; padding:4px 0; }
   .usermenu-items { display:none; position:absolute; right:0; top:100%; background:var(--panel); border:1px solid var(--line);
                     border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12); min-width:140px; z-index:20; padding:4px 0; }
@@ -84,6 +85,7 @@
   </div>
   <form method="post" action="{% url 'logout' %}" style="display:inline">{% csrf_token %}<button class="secondary" style="padding:3px 10px">Log out</button></form>
 </header>
+{% gemini_warnings as warnings %}{% if warnings %}<div class="setup-warning">{% for w in warnings %}<div>⚠ {{ w }}</div>{% endfor %}</div>{% endif %}
 <main>{% block content %}{% endblock %}</main>
 
 <dialog id="edit-dialog"><div class="body"></div></dialog>
