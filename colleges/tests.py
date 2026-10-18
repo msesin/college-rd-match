@@ -733,6 +733,7 @@ class PortalReviewFormTest(TestCase):
         page = self.client.get("/portal/").content.decode()
         self.assertEqual(page.count("data-edit>Edit<"), 31)  # 18 answers, the transcript and 12 colleges
         self.assertNotIn("blurb_", page)                     # no reasons to write for the colleges
+        self.assertIn('<option value="25" selected>Top 25%</option>', page)    # a stored 15 shows as its level
         return FormValues(page).data
 
     def test_submit_without_editing(self):
@@ -956,11 +957,14 @@ class TranscriptOcrTest(TestCase):
         merged = ocr.merge([r1, r2])
         self.assertEqual((merged["latest"], merged["prev"], merged["labels"]),
                          ({"Algebra": 12}, {"Algebra": 10}, ["2024-2025", "2023-2024"]))
-        self.assertEqual(merged["class_top_pct"], 10.0)                   # 3rd of 30
+        self.assertEqual(merged["class_top_pct"], 10)                     # 3rd of 30 = 10% -> top 10%
         gpa, note = transcript.compute_gpa([merged["latest"], merged["prev"]], merged["scale"])
-        self.assertEqual(gpa, 4.0)                                        # average 11 / 12 -> 4.0
+        self.assertEqual(gpa, 3.67)                                       # average 11 / 12 x 4
         self.assertIn("Average 11.00 / 12 over 2 years", note)
-        self.assertEqual(transcript.ua12_to_us(10.5), 3.85)
+        self.assertEqual((transcript.ua12_to_us(10.97), transcript.ua12_to_us(12), transcript.ua12_to_us(6)),
+                         (3.66, 4.0, 2.0))                                # proportional, never inflated
+        self.assertEqual([transcript.rank_bucket(p) for p in (0.5, 1, 3.3, 10, 13.3, 25, 30, 50, 60)],
+                         [1, 1, 5, 10, 25, 25, 50, 50, 100])              # the next level up
         ib = {**ocr.check({**reading(1.0, labels=("IB",), grades=(("Biology HL", "Biology HL", "7"),)), "grading_scale": "ib"})[0],
               "status": "accepted"}
         mixed = ocr.merge([r1, r2, ib])                                    # one scale only: the IB file is left out
@@ -1002,7 +1006,7 @@ class TranscriptAutofillTest(TestCase):
         out = r.json()
         self.assertTrue(out["ok"])
         self.assertEqual((out["grades_latest"], out["grades_prev"]), ("Algebra: 11\nPhysics: 10", "Algebra: 11\nPhysics: 10"))
-        self.assertEqual((out["gpa"], out["class_top_pct"], out["curriculum"]), ("3.85", 10.0, "no"))
+        self.assertEqual((out["gpa"], out["class_top_pct"], out["curriculum"]), ("3.50", 10, "no"))
         self.assertEqual(self.st.files.get().ocr["status"], "accepted")
         self.assertIsNone(self.st.subject_grades.get("Algebra"))          # nothing saved until the student saves
         self.st.refresh_from_db()
@@ -1085,7 +1089,7 @@ class SubmitWithTranscriptTest(TestCase):
         self.assertEqual(self.st.files.get().ocr["status"], "accepted")             # the uploaded file was read
         self.assertEqual((self.st.subject_grades, self.st.subject_grades_prev),     # empty answers filled
                          ({"Algebra": 11, "Physics": 10}, {"Algebra": 11, "Physics": 10}))
-        self.assertEqual((float(self.st.gpa), self.st.class_top_pct), (3.85, 10.0))
+        self.assertEqual((float(self.st.gpa), self.st.class_top_pct), (3.5, 10.0))         # 10.5 / 12 x 4
         self.assertEqual((self.st.academic_tier, self.st.ec_level), ("strong", "high"))   # rated
         details = matching.latest_run(self.st).results.filter(excluded=False).first().details
         levels = {m["key"]: m["level"] for m in details["metrics"]}

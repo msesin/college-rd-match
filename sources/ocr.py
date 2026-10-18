@@ -311,7 +311,9 @@ def merge(readings):
                     entry["grades"][s["name_en"] or s["name"]] = _grade(s["grade"])
         cr = r.get("class_rank") or {}
         if cr.get("position") and cr.get("class_size") and cr["position"] <= cr["class_size"]:
-            rank = round(100 * cr["position"] / cr["class_size"], 1)
+            from sources.transcript import rank_bucket
+
+            rank = rank_bucket(100 * cr["position"] / cr["class_size"])   # e.g. 3rd of 30 -> top 10%
         if r.get("performance", {}).get("note"):
             notes.append(f"{r['performance']['trend']}: {r['performance']['note']}")
     ordered = [years[k] for k in sorted(years, reverse=True) if years[k]["grades"]]

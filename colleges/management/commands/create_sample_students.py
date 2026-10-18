@@ -36,7 +36,7 @@ def ua(**grades):
 
 SAMPLES = [
     {
-        "name": "Solomiya Solomiya", "pronouns": "she", "school_name": "Kyiv Natural Science Lyceum No. 145, Kyiv", "det_score": 140, "sat_score": 1490, "class_top_pct": 3,
+        "name": "Solomiya Solomiya", "pronouns": "she", "school_name": "Kyiv Natural Science Lyceum No. 145, Kyiv", "det_score": 140, "sat_score": 1490, "class_top_pct": 5,
         "curriculum": "no", "gpa_note": "Year 11 (2025-26), Ukrainian 12-point scale",
         "subject_grades": ua(Ukrainian_language=11, Ukrainian_literature=11, World_literature=11, English=12,
                              History_of_Ukraine=10, World_history=11, Algebra=12, Geometry=12, Physics=12,
@@ -102,7 +102,7 @@ SAMPLES = [
                         "STEM college where students help each other rather than compete.",
     },
     {
-        "name": "Dmytro Lysenko", "pronouns": "he", "school_name": "Secondary School No. 7, Kremenchuk", "det_score": 120, "sat_score": 1250, "class_top_pct": 35,
+        "name": "Dmytro Lysenko", "pronouns": "he", "school_name": "Secondary School No. 7, Kremenchuk", "det_score": 120, "sat_score": 1250, "class_top_pct": 50,
         "curriculum": "no", "gpa_note": "Year 11 (2025-26), Ukrainian 12-point scale",
         "subject_grades": ua(Ukrainian_language=8, Ukrainian_literature=8, World_literature=9, English=9,
                              History_of_Ukraine=9, World_history=9, Algebra=9, Geometry=8, Physics=8, Chemistry=7,
@@ -118,7 +118,7 @@ SAMPLES = [
                         "more than theory. I want a friendly college with strong business connections and internships.",
     },
     {
-        "name": "Iryna Tkachenko", "pronouns": "she", "school_name": "American School of Warsaw, Poland", "det_score": None, "sat_score": 1380, "class_top_pct": 15,
+        "name": "Iryna Tkachenko", "pronouns": "she", "school_name": "American School of Warsaw, Poland", "det_score": None, "sat_score": 1380, "class_top_pct": 25,
         "curriculum": "ap", "gpa": Decimal("3.50"), "gpa_note": "American school in Warsaw since 2022, unweighted GPA",
         "subject_grades": {"AP US Government": "A", "AP World History": "A-", "AP Macroeconomics": "B+",
                            "English 11": "A", "Precalculus": "B", "Chemistry": "B+", "Spanish III": "A-",
@@ -150,7 +150,7 @@ SAMPLES = [
                         "want professors who take undergraduates into their labs.",
     },
     {
-        "name": "Kateryna Marchenko", "pronouns": "she", "school_name": "Gymnasium No. 1, Zhytomyr", "det_score": 135, "sat_score": 1420, "class_top_pct": 8,
+        "name": "Kateryna Marchenko", "pronouns": "she", "school_name": "Gymnasium No. 1, Zhytomyr", "det_score": 135, "sat_score": 1420, "class_top_pct": 10,
         "curriculum": "no", "gpa_note": "Year 11 (2025-26), Ukrainian 12-point scale",
         "subject_grades": ua(Ukrainian_language=11, Ukrainian_literature=12, World_literature=12, English=12,
                              History_of_Ukraine=11, World_history=11, Law=11, Algebra=10, Geometry=10, Physics=9,

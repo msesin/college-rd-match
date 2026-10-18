@@ -19,9 +19,17 @@ IB_CORE = "core (tok/ee)"
 US_POINTS = {"A+": 4.0, "A": 4.0, "A-": 3.7, "B+": 3.3, "B": 3.0, "B-": 2.7, "C+": 2.3, "C": 2.0, "C-": 1.7,
              "D+": 1.3, "D": 1.0, "D-": 0.7, "F": 0.0}
 A_LEVEL_POINTS = {"A*": 6, "A": 5, "B": 4, "C": 3, "D": 2, "E": 1, "U": 0}
-# Ukrainian 12-point grade -> US 4.0 points, the conversion commonly used by Ukrainian applicants (proposal, decision 48).
-# An average between two whole grades is interpolated (10.5 -> 3.85).
-UA12_TO_US = {12: 4.0, 11: 4.0, 10: 3.7, 9: 3.3, 8: 3.0, 7: 2.7, 6: 2.3, 5: 2.0, 4: 1.7, 3: 1.0, 2: 0.7, 1: 0.0}
+# Class rank levels (top X% of the class). A rank in between goes to the next level up: 3rd of 30 = 10% -> top 10%,
+# 4th of 30 = 13% -> top 25%. Below the top half: 100 (counted as below the top 25%).
+RANK_BUCKETS = (1, 5, 10, 25, 50)
+RANK_CHOICES = [(b, f"Top {b}%") for b in RANK_BUCKETS] + [(100, "Not in the top 50%")]
+
+
+def rank_bucket(pct):
+    """A class rank (top X%) -> the level it falls in: 1, 5, 10, 25, 50 or 100; None stays None."""
+    if pct is None:
+        return None
+    return next((b for b in RANK_BUCKETS if pct <= b), 100)
 
 # School subject -> subject group, by key words; the first match wins.
 SUBJECT_GROUPS = [
@@ -98,12 +106,8 @@ def graded(student):
 
 
 def ua12_to_us(average):
-    """A Ukrainian 12-point average -> US 4.0 scale (UA12_TO_US, interpolated)."""
-    average = max(1.0, min(12.0, average))
-    low = int(average)
-    if low >= 12:
-        return 4.0
-    return round(UA12_TO_US[low] + (UA12_TO_US[low + 1] - UA12_TO_US[low]) * (average - low), 2)
+    """A Ukrainian 12-point average -> US 4.0 scale, proportionally: average / 12 x 4 (10.97 -> 3.66; decision 51)."""
+    return round(max(0.0, min(12.0, average)) / 12 * 4, 2)
 
 
 def compute_gpa(grades_by_year, grading_scale):

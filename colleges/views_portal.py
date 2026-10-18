@@ -27,7 +27,7 @@ from django.views.decorators.http import require_POST
 
 from colleges.forms import SubjectGradesField
 from colleges.models import College, CollegeChoice, CollegeProfile, Student, StudentFile, StudentIdentity
-from sources import accounts, college_ai, demo, matching, student_ai
+from sources import accounts, college_ai, demo, matching, student_ai, transcript
 from sources.crypto import email_fingerprint, encrypt, normalise_email
 
 N_CHOICES = 20      # colleges a student can list (on the form and afterwards)
@@ -147,13 +147,31 @@ def register_confirm(request, token):
 
 # ---------------------------------------------------------------- portal
 
+class RankField(forms.TypedChoiceField):
+    """Class rank as one of the levels (top 1%, 5%, 10%, 25%, 50%, or not in the top half); stored as that number."""
+
+    def __init__(self, *args, **kwargs):
+        from sources.transcript import RANK_CHOICES
+
+        for k in ("max_value", "min_value", "step_size", "localize", "required", "empty_value", "coerce", "choices"):
+            kwargs.pop(k, None)
+        super().__init__(*args, choices=[("", "Not ranked / I don't know")] + RANK_CHOICES, coerce=float,
+                         empty_value=None, required=False, **kwargs)
+
+    def prepare_value(self, value):
+        from sources.transcript import rank_bucket
+
+        return rank_bucket(float(value)) if value not in (None, "") else ""
+
+
 class PortalForm(forms.ModelForm):
     class Meta:
         model = Student
         fields = ["pronouns", "school_name", "det_score", "sat_score", "curriculum", "subject_grades", "subject_grades_prev",
                   "gpa", "gpa_note", "class_top_pct", "transcript_note", "major_1", "major_2", "major_3", "academic_note", "activities",
                   "work_experience", "self_summary"]
-        field_classes = {"subject_grades": SubjectGradesField, "subject_grades_prev": SubjectGradesField}
+        field_classes = {"subject_grades": SubjectGradesField, "subject_grades_prev": SubjectGradesField,
+                         "class_top_pct": RankField}
         labels = {
             "pronouns": "Pronouns", "school_name": "Your school and its city", "det_score": "Duolingo English Test score", "sat_score": "SAT score (if you took it)",
             "subject_grades": "Your grades by subject: latest school year",
@@ -168,7 +186,7 @@ class PortalForm(forms.ModelForm):
         }
         help_texts = {
             "gpa_note": "For example: 11.4 / 12, Ukrainian scale.",
-            "class_top_pct": "For example 5 if you are in the top 5% of your class. Leave empty if your school does not rank.",
+            "class_top_pct": "Your place in your class by grades. Leave it empty if your school does not rank.",
             "school_name": "The full name, as on your transcript, e.g. 'Lyceum No. 145, Kyiv'.",
             "academic_note": "List results with level and year, e.g. 'National physics olympiad, 2nd place, 2025'.",
             "activities": "Clubs, sports, arts, projects and volunteering: what you did, your role, how long and how many "
@@ -223,7 +241,8 @@ def _shown(student):
         "subject_grades": format_grades(student.subject_grades),
         "subject_grades_prev": format_grades(student.subject_grades_prev),
         "gpa": text(student.gpa), "gpa_note": student.gpa_note,
-        "class_top_pct": f"Top {student.class_top_pct:g}% of the class" if student.class_top_pct is not None else "",
+        "class_top_pct": (dict(transcript.RANK_CHOICES).get(transcript.rank_bucket(student.class_top_pct), "")
+                          if student.class_top_pct is not None else ""),
         "transcript_note": student.transcript_note, "major_1": student.major_1, "major_2": student.major_2,
         "major_3": student.major_3, "academic_note": student.academic_note, "activities": student.activities,
         "work_experience": student.work_experience, "self_summary": student.self_summary,
@@ -552,7 +571,7 @@ def portal_transcript_autofill(request):
         "ok": True, "files": summary, "labels": merged["labels"],
         "grades_latest": transcript.format_grades(merged["latest"]), "grades_prev": transcript.format_grades(merged["prev"]),
         "gpa": f"{gpa:.2f}" if gpa is not None else "", "gpa_note": gpa_note,
-        "class_top_pct": merged["class_top_pct"], "curriculum": ocr.CURRICULUM_FOR_SCALE.get(merged["scale"], ""),
+        "class_top_pct": merged["class_top_pct"] or "", "curriculum": ocr.CURRICULUM_FOR_SCALE.get(merged["scale"], ""),
         "warning": " ".join(filter(None, [
             UNREADABLE.format(names=", ".join(unread)) if unread else "",
             "Some files use a different grading scale and were left out: please upload transcripts from one school "

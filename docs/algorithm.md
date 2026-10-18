@@ -136,8 +136,10 @@ straight down the column must match the subject rows; in a printed transcript, a
 the first or last row is checked again (a row read one off; blanks elsewhere are normal, for subjects not taught that
 year); text addressed to an AI is flagged. Gemini's raw answers are kept with each reading; a file that failed under
 older checks is read again the next time. Empty or struck-through cells are null. The two most recent years fill the form (one
-grading scale only); the GPA is the average out of 12 converted to 4.0 (12 and 11 = 4.0, 10 = 3.7, 9 = 3.3, 8 = 3.0,
-7 = 2.7 ... interpolated; *proposal*), or the 4.0 average of US letter grades. Nothing is saved until the student
+grading scale only); the GPA is the average out of 12 converted proportionally to 4.0 (average / 12 x 4: 10.97 ->
+3.66), or the 4.0 average of US letter grades. Class rank: only a rank printed on the transcript is read (Gemini does
+not guess it from grades); it becomes a level, top 1%, 5%, 10%, 25% or 50%, rounding to the next level up (3rd of 30
+= 10% -> top 10%; 4th of 30 = 13% -> top 25%), which the student can change in a dropdown with the same levels. Nothing is saved until the student
 checks the grades and saves. A file already read is never sent again; at most 10 autofill runs per student per day.
 On submit, transcript files uploaded without autofill are read too, at the same time as the ratings: grade answers
 the student left empty are filled from them (typed answers are never replaced), before the first match.
