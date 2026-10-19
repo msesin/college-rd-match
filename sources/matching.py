@@ -50,7 +50,7 @@ CATEGORIES = {"Academic": ["sat", "rigor", "gpa", "class_rank"],
               "Fit": ["major"]}
 ORDER = [k for keys in CATEGORIES.values() for k in keys]   # metrics are listed in this order everywhere
 CATEGORY = {k: name for name, keys in CATEGORIES.items() for k in keys}
-LABELS = {"sat": "SAT", "rigor": "Rigor of school record", "major": "Majors", "character": "Character (self-summary)",
+LABELS = {"sat": "SAT", "rigor": "Rigor of school record", "major": "Majors", "character": "Character",
           "gpa": "GPA", "talent": "Talent/ability", "extracurricular": "Extracurricular activities",
           "class_rank": "Class rank", "volunteer": "Volunteer work", "work": "Work experience"}
 

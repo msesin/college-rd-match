@@ -70,7 +70,7 @@ the nine C7 metrics.
 | Rigor of school record | Academic | 13.3 | Rigor of secondary school record | English curriculum and strong coursework | | regular Ukrainian school and weak coursework |
 | GPA | Academic | 10.6 | Academic GPA | at or above the college's GPA bar | one level below; no grades | two levels below |
 | Class rank | Academic | 5.3 | Class rank | at or above the college's class-rank bar | one level below; no rank | two levels below |
-| Character (self-summary) | Personal | 13.3 | Character/personal qualities | vibe high | moderate; not judged yet | none |
+| Character | Personal | 13.3 | Character/personal qualities | vibe high | moderate; not judged yet | none |
 | Talent/ability | Personal | 10.6 | Talent/ability | very strong | strong; not rated yet | moderate |
 | Extracurricular activities | Personal | 10.6 | Extracurricular activities | high | medium; not rated yet | low |
 | Volunteer work | Personal | 2.7 | Volunteer work | high | medium; not rated yet | low |
@@ -112,13 +112,14 @@ applicants -5%; 12 applicants -10%; 14 applicants -15%; 16 or more -20%, so a pr
 `import_ugs_history` reads the organisation's past results: an .xlsx file whose sheet "General" has one row per
 college and one column per year (header `College | 2018 | 2019 | ...`), each cell the number of students who went
 there (no names). It sets each college's capacity (above), the "UGS students / year" column (average over all years) on
-the Colleges dashboard and in the students' matches, and the UGS results page (linked from Colleges; colleges that are
+the Colleges dashboard, the "UGS track record" column in the students' matches (UGS students there since the first year,
+and the latest year one went), and the UGS results page (linked from Colleges; colleges that are
 not on the list are kept and shown too). Sheet names are matched to the colleges on the list automatically; names that differ go in
 `data/ugs_history_names.json` (see `sources/ugs_history.py`).
 
 ### Reading transcripts (OCR)
 
-Students can type their grades or press "Autofill with a transcript" (`sources/ocr.py`). Each file (PNG, JPEG, PDF,
+Students can type their grades or press "Click to autofill" to read them from a transcript (`sources/ocr.py`). Each file (PNG, JPEG, PDF,
 HEIC; photo, scan or screenshot; Ukrainian or English; printed or handwritten) is read in two tiers, one request each:
 
 1. **Fast model** (`GEMINI_MODEL`, gemini-3.5-flash-lite), JSON mode, temperature 0: subjects and grades per school

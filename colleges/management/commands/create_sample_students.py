@@ -256,6 +256,9 @@ class Command(BaseCommand):
             st = existing.get(name) or Student.objects.create(cohort="sample")
             for field, value in data.items():
                 setattr(st, field, value)
+            # back to the start: no edit lock, no autofill count, no reading of a visitor's upload (ratings are kept)
+            st.attributes = {k: v for k, v in (st.attributes or {}).items()
+                             if k not in ("reopens", "ocr_runs", "transcript_read", "ai_pending", "ai_flags")}
             st.save()
             identity, _ = StudentIdentity.objects.get_or_create(student=st)
             identity.name_encrypted = token

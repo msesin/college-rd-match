@@ -125,7 +125,7 @@ def gemini_warnings():
         out.append("No Gemini key: students' answers are not rated and transcripts are not read.")
     elif os.environ.get("ALLOW_STUDENT_DATA_TO_GEMINI") != "1":
         out.append("Gemini is off for real students (ALLOW_STUDENT_DATA_TO_GEMINI is not 1): their answers are not "
-                   "rated, their transcripts are not read, and they do not see \"Autofill with a transcript\".")
+                   "rated, their transcripts are not read, and they do not see the transcript autofill (\"Click to autofill\").")
     if not os.environ.get("STUDENT_EMAIL_DOMAINS", "").strip():
         out.append("Sign-up is open only to students whose email was added in the admin. To let anyone with your "
                    "organisation's email sign up (and only them), set STUDENT_EMAIL_DOMAINS (e.g. ugs.foundation) in .env.")
@@ -135,3 +135,21 @@ def gemini_warnings():
         out.append(f".env was changed ({changed}) after the site started, so the change is not in use yet: restart "
                    "the site (on the server: sudo systemctl restart ugs).")
     return out
+
+
+@register.simple_tag
+def beta_notice():
+    from django.conf import settings
+
+    return getattr(settings, "BETA_NOTICE", False)
+
+
+@register.simple_tag
+def demo_reset_seconds():
+    """Seconds until the next demo reset (cron runs every RESET_MINUTES on the clock: :00, :10, :20, ...)."""
+    import time
+
+    from sources.demo import RESET_MINUTES
+
+    period = RESET_MINUTES * 60
+    return int(period - time.time() % period)

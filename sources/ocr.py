@@ -116,7 +116,8 @@ VALID = {
     "ua12": lambda g: g.isdigit() and 1 <= int(g) <= 12,
     "ib": lambda g: g.isdigit() and 1 <= int(g) <= 7,
     "alevels": lambda g: g in ("A*", "A", "B", "C", "D", "E", "U"),
-    "us": lambda g: re.fullmatch(r"[A-D][+-]?|F|\d{1,3}(\.\d+)?", g) is not None,
+    "us": lambda g: re.fullmatch(r"[A-D][+-]?|F", g) is not None or (                     # letters, or a percent
+        re.fullmatch(r"\d{1,3}(\.\d+)?%?", g) is not None and float(g.rstrip("%")) <= 110),  # (honors up to 110)
     "other": lambda g: len(g) <= 6,
 }
 

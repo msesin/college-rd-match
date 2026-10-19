@@ -1,7 +1,8 @@
 """The public demo login: one fictional sample student, with the password published in README.md.
 
 `create_sample_students` gives this student (and only this one) a login; `create_sample_students --demo-only`
-resets it, e.g. hourly from cron on the server. Since anyone can use it, the demo account:
+resets it every RESET_MINUTES from cron on the server: the application goes back to "not submitted", and everyone using
+the demo is logged out (setting the password again ends every open demo session). Since anyone can use it, the demo account:
 - does not count towards other students' crowding (no sample student does; sources/students.py);
 - cannot upload or delete files;
 - never sends anything to Gemini (its ratings are the saved ones);
@@ -10,6 +11,7 @@ resets it, e.g. hourly from cron on the server. Since anyone can use it, the dem
 
 DEMO_USERNAME = "demo"
 DEMO_PASSWORD = "ugs-demo-2026"
+RESET_MINUTES = 10   # cron: */10 * * * *  (docs/deploy.md)
 DEMO_STUDENT = "Solomiya Solomiya"   # the fictional sample student behind the login
 # IPEDS UNITID: the 8 Ivy League colleges and 7 other well-known ones. Colleges missing from the database are skipped;
 # if none of them is there, the demo sees every college.

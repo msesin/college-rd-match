@@ -176,6 +176,9 @@ LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/login/"
 # Student uploads (transcripts): max size per file
 STUDENT_UPLOAD_MAX_MB = 10
+# Beta: a notice on every student page that college rules and expectations may have changed (BETA_NOTICE=0 hides it).
+BETA_NOTICE = os.environ.get("BETA_NOTICE", "1") == "1"
+
 # After a student submits, ask Gemini for their ratings in the background (sources/student_ai.py).
 STUDENT_AI_ON_SUBMIT = True
 

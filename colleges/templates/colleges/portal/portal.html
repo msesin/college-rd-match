@@ -45,7 +45,12 @@
   </div>
   <div class="card">
     <h2>What you submitted</h2>
-    <p class="muted small">Submitted on {{ student.submitted_at|date:"F j, Y" }}. Need to change something here? Contact your UGS counselor.</p>
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap">
+      <p class="muted small" style="margin:0">Submitted on {{ student.submitted_at|date:"F j, Y" }}.</p>
+      {% if next_edit_at %}<span class="small muted">You can change your profile again on <b>{{ next_edit_at|date:"F j" }}</b>.</span>
+      {% else %}<form method="post" action="{% url 'portal_reopen' %}" style="margin:0">{% csrf_token %}
+        <button class="edit" onclick="return confirm('Are you sure you want to make changes to your profile?\n\nYou can do this only once now: the next change will be possible in a week. Your profile goes back to editing, and your matches come back as soon as you submit it again.')">Edit my profile</button></form>{% endif %}
+    </div>
     <p><b>Pronouns:</b> {{ student.get_pronouns_display }} · <b>School:</b> {{ student.school_name|default:"—" }} · <b>DET:</b> {{ student.det_score|default:"—" }} · <b>SAT:</b> {{ student.sat_score|default:"—" }}</p>
     <p><b>Grades:</b> {% if student.gpa %}GPA {{ student.gpa }}{% endif %} {{ student.gpa_note }}{% if student.class_top_pct %} · top {{ student.class_top_pct|floatformat:"-1" }}% of class{% endif %}</p>
     {% if student.subject_grades %}<p><b>By subject, latest year:</b> {{ student.subject_grades|grades_text }}</p>{% endif %}
@@ -89,8 +94,20 @@
 {% else %}
 
 {% if saved == "draft" %}<div class="notice">Saved. You can come back and finish later.</div>{% endif %}
+{% if reopened %}<div class="notice">You are changing your submitted profile. When you are done, press <b>Submit</b> at the
+bottom to see your updated matches. This was your edit for this week: the next one is possible on
+{{ lock_until|date:"F j" }}.</div>{% endif %}
 {% if errors or form.errors %}<div class="errors"><b>Please check the form:</b><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}
   {% for field in form %}{% for e in field.errors %}<li>{{ field.label }}: {{ e }}</li>{% endfor %}{% endfor %}</ul></div>{% endif %}
+
+<div class="info-box"><b>How your application is read.</b> Some parts of it (your school, your achievements,
+activities and work, your description of yourself, and your transcript) are evaluated by Google's Gemini AI, on three
+levels, such as strong, moderate and weak. Where one level ends and the next begins is a judgement call, just as when an
+admissions officer reads an application, but every application is judged by the same written rules, which we hope
+reduces human bias. Your UGS counselor can check and correct every rating.
+<div class="small" style="margin-top:6px">We use Google's paid Gemini service: Google does not use what we send to train
+or improve its AI, and keeps it only for a limited time to detect misuse. We remove your name and email from your
+answers before sending them; a transcript file is sent as it is.</div></div>
 
 <p class="muted">We filled in what UGS has on file. Check each answer and press <b>Edit</b> to change it. When everything is
 right, press <b>Submit</b> at the bottom; you can submit without changing anything. After that, the form is locked.
@@ -115,7 +132,7 @@ right, press <b>Submit</b> at the bottom; you can submit without changing anythi
   us read them from your transcript.</p>
   {% demo_user as is_demo %}{% if autofill and not is_demo %}
   <div class="autofill">
-    <button type="button" class="secondary" id="autofill-open">Autofill with a transcript</button>
+    <button type="button" class="secondary" id="autofill-open">Click to autofill</button>
     <div id="autofill-panel" hidden>
       <p class="small">Choose your transcript for the <b>past 2 academic years</b> (several files are fine: PNG, JPEG, PDF or
       HEIC, up to {{ max_mb }} MB each). Printed, handwritten, photos and scans all work; for photos, shoot the whole page
@@ -208,7 +225,7 @@ right, press <b>Submit</b> at the bottom; you can submit without changing anythi
   <b id="loading-title">Reading your transcript…</b><div class="small muted" id="loading-text">This takes a few seconds, up
   to a minute for handwritten pages. Please keep this page open.</div></div></div>
 <script>
-  // "Autofill with a transcript": send the chosen files, show the loading screen, then fill the grades in (opened, so
+  // "Click to autofill": send the chosen files, show the loading screen, then fill the grades in (opened, so
   // the student sees and checks them). Nothing is saved until the student saves the form.
   (() => {
     const open = document.getElementById('autofill-open');

@@ -189,6 +189,14 @@ class CollegeProfile(models.Model):
         help_text="How many UGS students the college usually admits a year (average of the last 3 years, at least 1)")
 
     @property
+    def ugs_record(self):
+        """UGS's track record here: {"total": students since the first year, "since": first year, "latest": the latest
+        year one went}, from UGS's results (shown to students instead of an average)."""
+        admits = self.ugs_admits or {}
+        return {"total": sum(admits.values()), "since": min(admits) if admits else None,
+                "latest": max((y for y, n in admits.items() if n), default=None)}
+
+    @property
     def ugs_admits_avg(self):
         """Average UGS students a year over every year in UGS's results (None before the import)."""
         from sources.ugs_history import average

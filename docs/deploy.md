@@ -134,9 +134,9 @@ Range empty) in the subnet's Security List or in a network security group on the
 - Oracle can reclaim idle Always Free instances. Keep the backups somewhere else too.
 - After every change to `.env`, restart the site (`sudo systemctl restart ugs`): Django reads `.env` only when it
   starts. Staff pages show a yellow warning while a change is not in use yet, or while Gemini is off for real students.
-- Public demo login (`demo`, password in README.md): run `create_sample_students` once, then reset it every hour so
+- Public demo login (`demo`, password in README.md): run `create_sample_students` once, then reset it every 10 minutes so
   visitors' changes do not last: `crontab -e`, add
-  `5 * * * * cd /home/<user>/ugs-rd-matching && .venv/bin/python manage.py create_sample_students --demo-only > /dev/null`.
+  `*/10 * * * * cd /home/<user>/ugs-rd-matching && .venv/bin/python manage.py create_sample_students --demo-only > /dev/null`.
   To turn the demo off: `create_sample_students --delete` (removes all sample students and the demo login).
 
 ## After go-live: the server is the master copy

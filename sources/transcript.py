@@ -19,6 +19,24 @@ IB_CORE = "core (tok/ee)"
 US_POINTS = {"A+": 4.0, "A": 4.0, "A-": 3.7, "B+": 3.3, "B": 3.0, "B-": 2.7, "C+": 2.3, "C": 2.0, "C-": 1.7,
              "D+": 1.3, "D": 1.0, "D-": 0.7, "F": 0.0}
 A_LEVEL_POINTS = {"A*": 6, "A": 5, "B": 4, "C": 3, "D": 2, "E": 1, "U": 0}
+# US percent grades -> 4.0 points (the College Board's conversion): (lowest percent, points). Weighted honors grades
+# above 100 (some schools add a bonus, e.g. 104) count as 100.
+US_PERCENT = [(93, 4.0), (90, 3.7), (87, 3.3), (83, 3.0), (80, 2.7), (77, 2.3), (73, 2.0), (70, 1.7), (67, 1.3),
+              (65, 1.0), (0, 0.0)]
+
+
+def us_points(grade):
+    """A US grade -> 4.0 points: a letter (A+ ... F) or a percent (0-100, weighted honors up to 110); None if neither."""
+    text = str(grade).strip().upper()
+    if text in US_POINTS:
+        return US_POINTS[text]
+    try:
+        pct = float(text.rstrip("%"))
+    except ValueError:
+        return None
+    if not 0 <= pct <= 110:
+        return None
+    return next(points for low, points in US_PERCENT if min(pct, 100) >= low)
 # Class rank levels (top X% of the class). A rank in between goes to the next level up: 3rd of 30 = 10% -> top 10%,
 # 4th of 30 = 13% -> top 25%. Below the top half: 100 (counted as below the top 25%).
 RANK_BUCKETS = (1, 5, 10, 25, 50)
@@ -86,8 +104,9 @@ def _value(grade, sc):
             return float(grade)
         except (TypeError, ValueError):
             return None
-    table = A_LEVEL_POINTS if sc == "alevels" else US_POINTS
-    return table.get(str(grade).strip().upper())
+    if sc == "alevels":
+        return A_LEVEL_POINTS.get(str(grade).strip().upper())
+    return us_points(grade)   # US: letters or percents
 
 
 def graded(student):
@@ -129,11 +148,12 @@ def compute_gpa(grades_by_year, grading_scale):
         return gpa, (f"Average {avg:.2f} / 12 over {years} year{'s' if years != 1 else ''} ({len(nums)} grades), "
                      f"converted to {gpa:.2f} / 4.0")
     if grading_scale == "us":
-        points = [US_POINTS[str(v).upper()] for v in values if str(v).upper() in US_POINTS]
+        points = [p for p in (us_points(v) for v in values) if p is not None]
         if not points:
             return None, ""
         gpa = round(sum(points) / len(points), 2)
-        return gpa, f"Unweighted average of {len(points)} letter grades over {years} year{'s' if years != 1 else ''}"
+        return gpa, (f"Unweighted average of {len(points)} grades over {years} year{'s' if years != 1 else ''} "
+                     "(percents converted to 4.0; honors bonuses not counted)")
     return None, ""
 
 

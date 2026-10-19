@@ -124,6 +124,8 @@ class PortalFlowTest(TestCase):
         self._signup("mckayla@example.com")
         r = self.client.post("/portal/", {"action": "submit", "pronouns": "she"})
         self.assertContains(r, "Please choose at least 12 colleges")
+        self.assertContains(r, "How your application is read.")                     # the note on AI evaluation
+        self.assertContains(r, "does not use what we send to train")
         self.assertNotContains(r, "My matches")                                   # no matches tab before submitting
         self.assertContains(r, "Please upload your transcript")
         self.student.refresh_from_db()
@@ -158,7 +160,11 @@ class PortalFlowTest(TestCase):
         self.assertContains(r, "All colleges (20)")                     # one table, no "12 best" split
         self.assertContains(r, "Only my list (12)")
         self.assertNotContains(r, "best matches")
-        self.assertContains(r, "UGS students / year")
+        self.assertContains(r, "UGS track record")
+        self.assertContains(r, "None yet")                                          # no UGS student there yet
+        self.assertContains(r, "What do the reasons mean?")                         # the explanation, hidden at first
+        self.assertContains(r, "Common Data Set (CDS)")
+        self.assertNotContains(r, "Character (self-summary)")
         self.assertNotContains(r, "Full rides")
         self.assertEqual(r.content.decode().count('data-mine="1"'), 12)    # rows the "Only my list" filter keeps
         self.assertContains(r, "Full points:")
@@ -328,12 +334,19 @@ class PortalFlowTest(TestCase):
         self.assertIn("not part of the demo", r.json()["error"])
         harvard.delete()
 
-        # the hourly reset undoes it all and keeps the password
+        # the 10-minute reset undoes it all, logs the visitor out and keeps the password
+        st.attributes = {**(st.attributes or {}), "reopens": ["2026-01-01T00:00:00+00:00"], "ocr_runs": ["x"]}
+        st.save()
+        self.assertContains(self.client.get("/portal/"), "next reset in")            # the countdown in the banner
         call_command("create_sample_students", demo_only=True, stdout=open(os.devnull, "w"))
         st.refresh_from_db()
-        self.assertIsNone(st.submitted_at)
+        self.assertIsNone(st.submitted_at)                                          # must press Submit again
         self.assertFalse(st.choices.filter(college_id=100019).exists())
+        self.assertNotIn("reopens", st.attributes)
+        self.assertNotIn("ocr_runs", st.attributes)
+        self.assertRedirects(self.client.get("/portal/"), "/login/?next=/portal/", fetch_redirect_response=False)  # logged out
         self.assertTrue(self.client.login(username=demo.DEMO_USERNAME, password=demo.DEMO_PASSWORD))
+        self.assertNotContains(self.client.get("/portal/"), "My matches")           # no matches until submitted
 
     def test_gemini_rates_on_submit_before_the_match(self):
         import json
@@ -382,6 +395,45 @@ class PortalFlowTest(TestCase):
             r = self.client.post("/portal/", self._complete_form(list(College.objects.order_by("unitid")[:12])))
         self.assertRedirects(r, "/portal/matches/?submitted=1", fetch_redirect_response=False)   # results anyway
         background.assert_called_once()
+
+    def test_edit_the_submitted_profile_once_a_week(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        self._signup("mckayla@example.com")
+        self.client.post("/portal/", self._complete_form(list(College.objects.order_by("unitid")[:12])))
+        page = self.client.get("/portal/").content.decode()
+        self.assertIn("Edit my profile", page)
+        self.assertIn("only once now", page)                                         # the confirmation popup text
+        r = self.client.post("/portal/reopen/")
+        self.assertRedirects(r, "/portal/?reopened=1", fetch_redirect_response=False)
+        self.student.refresh_from_db()
+        self.assertIsNone(self.student.submitted_at)                                # editable again
+        self.assertContains(self.client.get("/portal/?reopened=1"), "This was your edit for this week")
+        self.assertRedirects(self.client.get("/portal/matches/"), "/portal/", fetch_redirect_response=False)  # hidden
+        data = self._complete_form(list(College.objects.order_by("unitid")[:12]))
+        data["major_1"] = "Mathematics"
+        self.client.post("/portal/", data)                                          # submit again, once
+        self.student.refresh_from_db()
+        self.assertEqual((bool(self.student.submitted_at), self.student.major_1), (True, "Mathematics"))
+        page = self.client.get("/portal/").content.decode()
+        self.assertIn("You can change your profile again on", page)                 # locked for a week
+        self.assertNotIn("Edit my profile", page)
+        self.client.post("/portal/reopen/")                                         # a second time: refused
+        self.student.refresh_from_db()
+        self.assertIsNotNone(self.student.submitted_at)
+        week_ago = (timezone.now() - timedelta(days=7, minutes=1)).isoformat()      # a week later: allowed again
+        self.student.attributes = {**self.student.attributes, "reopens": [week_ago]}
+        self.student.save()
+        self.client.post("/portal/reopen/")
+        self.student.refresh_from_db()
+        self.assertIsNone(self.student.submitted_at)
+
+    def test_beta_notice(self):
+        self.assertContains(self.client.get("/login/"), "Beta version.")
+        with override_settings(BETA_NOTICE=False):
+            self.assertNotContains(self.client.get("/login/"), "Beta version.")
 
     def test_engine_excludes_men_from_womens_colleges(self):
         from sources import matching
@@ -970,6 +1022,20 @@ class TranscriptOcrTest(TestCase):
         mixed = ocr.merge([r1, r2, ib])                                    # one scale only: the IB file is left out
         self.assertEqual((mixed["scale"], mixed["prev"], mixed["other_scale"]), ("ua12", {"Algebra": 10}, 1))
 
+    def test_us_percent_grades(self):
+        from sources import ocr, transcript
+
+        # a US school with percent grades, some of them weighted honors above 100 (the S-RUAGTT case)
+        self.assertEqual([transcript.us_points(g) for g in ("A", "B+", "95", "91", "84", "104", "64", "150", "P")],
+                         [4.0, 3.3, 4.0, 3.7, 3.0, 4.0, 0.0, None, None])
+        st = Student(curriculum="ap", subject_grades={"Honors Calculus": 105, "English": 88},
+                     subject_grades_prev={"Honors CS": 104, "History": 91})
+        self.assertEqual(transcript.gpa_level(st)[0], "maybe")                      # graded now, not "no grades"
+        gpa, _ = transcript.compute_gpa([st.subject_grades, st.subject_grades_prev], "us")
+        self.assertEqual(gpa, 3.75)
+        self.assertTrue(all(ocr.VALID["us"](g) for g in ("A-", "104", "110", "95%")))
+        self.assertFalse(any(ocr.VALID["us"](g) for g in ("111", "P", "1050")))
+
     def test_file_types_by_content(self):
         from sources import ocr
 
@@ -1080,7 +1146,7 @@ class SubmitWithTranscriptTest(TestCase):
                 mock.patch("sources.college_ai._call_gemini", side_effect=fake_rating), \
                 mock.patch("sources.ocr.make_client"), mock.patch("sources.ocr._ask", return_value=(answer, {})):
             page = self.client.get("/portal/").content.decode()
-            self.assertIn("Autofill with a transcript", page)                       # shown when Gemini is on
+            self.assertIn("Click to autofill", page)                       # shown when Gemini is on
             data = {**FormValues(page).data, "action": "submit",
                     "transcripts": SimpleUploadedFile("t.png", PNG, content_type="image/png")}
             r = self.client.post("/portal/", data)

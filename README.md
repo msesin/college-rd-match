@@ -7,7 +7,7 @@
 > Review the pre-filled application, press **Submit**, and see the student's matches: sort them, filter to the
 > student's own list, and add or remove colleges right in the table. The demo shows 15 well-known colleges (the Ivy
 > League, Duke, MIT, Stanford and a few more); a real installation has its organisation's whole list. The student is
-> invented, the account resets every hour, and other visitors may be using it at the same time, so please don't type
+> invented, the account resets every 10 minutes (which logs you out), and other visitors may be using it at the same time, so please don't type
 > anything real into it.
 
 A Django web app that helps a counseling team guide students through applying to US colleges. Counselors get a
@@ -34,7 +34,7 @@ with its own college list, a school counseling office, or an independent counsel
   and complete the profile (tests, grades by
   subject, school, majors, awards, activities, work, a short self-description, transcript upload), and choose 12-20
   colleges.
-- Type in their grades for the past 2 years, or press "Autofill with a transcript": photos, scans, screenshots or
+- Type in their grades for the past 2 years, or press "Click to autofill" to read their transcript: photos, scans, screenshots or
   PDFs, Ukrainian or English, printed or handwritten, are read by a fast model and, when it is unsure or the page is
   handwritten, by a precise one; what neither reads confidently goes to a counselor's review queue. The GPA is
   calculated (Ukrainian 12-point averages converted to 4.0).

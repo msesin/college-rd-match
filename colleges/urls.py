@@ -15,6 +15,7 @@ urlpatterns = [
     path("portal/matches/", views_portal.portal_matches, name="portal_matches"),
     path("portal/matches/state/", views_portal.portal_matches_state, name="portal_matches_state"),
     path("portal/list/", views_portal.portal_list_change, name="portal_list_change"),
+    path("portal/reopen/", views_portal.portal_reopen, name="portal_reopen"),
     path("portal/transcript/autofill/", views_portal.portal_transcript_autofill, name="portal_transcript_autofill"),
     path("portal/files/<int:pk>/", views_portal.portal_file, name="portal_file"),
     path("portal/files/<int:pk>/delete/", views_portal.portal_file_delete, name="portal_file_delete"),

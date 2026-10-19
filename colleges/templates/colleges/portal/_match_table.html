@@ -7,7 +7,7 @@
   <th class="center" data-sort="num" title="Your list, in your order. Add or remove colleges here. Sort">My list<span class="arrow"></span></th>
   <th class="center" data-sort="num" title="UGS students who have this college on their list now. Sort">UGS applicants<span class="arrow"></span></th>
   <th class="center" data-sort="num" title="Share of international applicants admitted. Sort">Intl admit rate<span class="arrow"></span></th>
-  <th class="center" data-sort="num" title="How many UGS students went to this college per year on average ({{ ugs_years }}). Sort">UGS students / year<span class="arrow"></span></th>
+  <th class="center" data-sort="num" title="How many UGS students went to this college since UGS began, and the latest year one did. Sort">UGS track record<span class="arrow"></span></th>
 </tr></thead>
 <tbody>
 {% for row in rows %}{% with d=row.r.details %}
@@ -19,7 +19,7 @@
   <td class="center" data-v="{{ row.choice|default:999 }}">{% include "colleges/portal/_list_button.html" %}</td>
   <td class="center" data-v="{{ row.applicants }}">{{ row.applicants }}</td>
   <td class="center" data-v="{% if d.intl_admit_rate is not None %}{{ d.intl_admit_rate }}{% elif d.overall_admit_rate is not None %}{{ d.overall_admit_rate }}{% else %}-1{% endif %}">{% if d.intl_admit_rate is not None %}{{ d.intl_admit_rate|floatformat:1 }}%{% elif d.overall_admit_rate is not None %}<span class="muted" title="Overall admit rate; the college publishes no international figure">({{ d.overall_admit_rate|floatformat:0 }}% overall)</span>{% endif %}</td>
-  <td class="center" data-v="{{ row.profile.ugs_admits_avg|default_if_none:-1 }}">{% if row.profile.ugs_admits_avg is not None %}{{ row.profile.ugs_admits_avg|floatformat:1 }}{% else %}<span class="muted">—</span>{% endif %}</td>
+  {% with rec=row.profile.ugs_record %}<td class="center small" data-v="{{ rec.total }}">{% if rec.total %}<b>{{ rec.total }}</b> since {{ rec.since }}<div class="muted">latest {{ rec.latest }}</div>{% else %}<span class="muted">None yet</span>{% endif %}</td>{% endwith %}
 </tr>{% endwith %}{% endfor %}
 </tbody>
 </table>

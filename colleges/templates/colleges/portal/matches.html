@@ -3,6 +3,7 @@
 {% block title %}My matches{% endblock %}
 {% block wrapclass %}wide{% endblock %}
 {% block bannerclass %}wide{% endblock %}
+{% block betaclass %}wide{% endblock %}
 {% block content %}
 <h1>{% if name %}Hi, {{ name }}{% else %}Your matches{% endif %}</h1>
 {% include "colleges/portal/_tabs.html" with active="matches" %}
@@ -19,6 +20,39 @@ than it usually admits, the match goes down for all of them (by up to a fifth), 
 page updates by itself. Your counselor
 will go through this with you.</p>
 
+<div class="explain">
+  <button type="button" class="edit" id="explain-toggle" aria-expanded="false" aria-controls="explain-panel">What do the reasons mean? ▾</button>
+  <div id="explain-panel" class="card small" hidden>
+    <p>Each match is built from ten factors. For each one, the "Why" column says whether you got full points, part of
+    them, or none. How many points each factor is worth differs from college to college.</p>
+    <p><b>Where this comes from:</b> almost every US college publishes a <b>Common Data Set (CDS)</b> each year: a
+    standard report with its admissions numbers (applicants, admits, test scores, grades) and, in section C7, how much
+    each factor matters in its decisions: very important, important, considered, or not considered. Nine of the ten
+    factors below, and how much each college weighs them, come from the college's own CDS. Majors and UGS applicants are
+    added by UGS.</p>
+    <dl class="factors">
+      <dt>SAT</dt><dd>Your SAT score against the scores of students the college admitted. At test-optional colleges you
+      can apply without it; if your score is low for that college, we tell you not to send it.</dd>
+      <dt>Rigor of school record</dt><dd>How demanding your schooling is: the type of school (an English-language
+      curriculum such as IB, AP or A-levels; a top Ukrainian lyceum or gymnasium; or a regular school) and your grades in
+      the subjects of the major you want.</dd>
+      <dt>GPA</dt><dd>Your grades over the past two years, compared with the grades of the students the college admits.</dd>
+      <dt>Class rank</dt><dd>Where you stand in your class (top 1%, 5%, 10%, 25% or 50%), compared with the college's
+      students. If your school does not rank, you get half of these points.</dd>
+      <dt>Character</dt><dd>How well your description of yourself fits the kind of student the college looks for.</dd>
+      <dt>Talent/ability</dt><dd>Awards, olympiads, research and other exceptional achievements (academic, artistic or
+      athletic).</dd>
+      <dt>Extracurricular activities</dt><dd>How long, how deeply and with what leadership or impact you take part in
+      activities outside class.</dd>
+      <dt>Volunteer work</dt><dd>Regular volunteering and community service.</dd>
+      <dt>Work experience</dt><dd>Paid work, a family business, or caring for family members.</dd>
+      <dt>Majors</dt><dd>How strong the college is in what you want to study, from program rankings (not the CDS). A
+      college with nothing related to your majors is left out.</dd>
+      <dt>UGS applicants</dt><dd>Not in the CDS: when many more UGS students apply to a college than it usually admits,
+      the match goes down a little for all of them.</dd>
+    </dl>
+  </div>
+</div>
 {% if rows %}
 <div class="toolbar">
   <h2 style="margin:0">Your matches</h2>
@@ -42,6 +76,16 @@ will go through this with you.</p>
 </details>
 {% endif %}
 <script>
+  // "What do the reasons mean?": show or hide the explanation.
+  (() => {
+    const button = document.getElementById('explain-toggle'), panel = document.getElementById('explain-panel');
+    button.addEventListener('click', () => {
+      panel.hidden = !panel.hidden;
+      button.textContent = panel.hidden ? 'What do the reasons mean? ▾' : 'Hide the explanation ▴';
+      button.setAttribute('aria-expanded', !panel.hidden);
+    });
+  })();
+
   // Sort: click a column name (again to reverse). Filter: all colleges or only the student's list. Both work together
   // and are kept when the page reloads itself.
   const KEY = 'matches-view';

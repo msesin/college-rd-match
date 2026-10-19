@@ -33,7 +33,8 @@ from sources.crypto import email_fingerprint, encrypt, normalise_email
 N_CHOICES = 20      # colleges a student can list (on the form and afterwards)
 N_RECOMMENDED = 12  # UGS college counseling recommends 12 at first; at least 12 to submit
 ALLOWED_UPLOADS = {".png", ".jpg", ".jpeg", ".pdf", ".heic", ".heif", ".webp"}
-OCR_RUNS_PER_DAY = 10   # "Autofill with a transcript" per student per day (each run may use the precise model)
+EDIT_EVERY_DAYS = 7     # after submitting, a student may reopen their profile once a week (decision 52)
+OCR_RUNS_PER_DAY = 10   # "Click to autofill" (from a transcript) per student per day (each run may use the precise model)
 
 
 # ---------------------------------------------------------------- sign-up
@@ -413,6 +414,9 @@ def portal(request):
         "autofill": student_ai.allowed(student) and college_ai.provider()[0] == "gemini",
         "my_list": [c.college for c in student.choices.select_related("college").order_by("rank")],
         "saved": request.GET.get("saved"), "max_mb": settings.STUDENT_UPLOAD_MAX_MB,
+        "next_edit_at": next_edit_at(student), "edit_every_days": EDIT_EVERY_DAYS,
+        "reopened": bool((student.attributes or {}).get("reopens")) and not student.submitted_at,
+        "lock_until": edit_lock_until(student),
     })
 
 
@@ -516,7 +520,7 @@ UNREADABLE = ("We could not read {names} reliably. Please upload it in a differe
 
 @require_POST
 def portal_transcript_autofill(request):
-    """"Autofill with a transcript": save the uploaded files, read them (sources/ocr.py: fast model, then the precise
+    """"Click to autofill" (from a transcript): save the uploaded files, read them (sources/ocr.py: fast model, then the precise
     one when needed), and answer with the grades for the two most recent years, the GPA and the class rank, for the
     page to fill into the form. Nothing is saved to the profile here: the student checks the grades, then saves."""
     from datetime import timedelta
@@ -578,6 +582,34 @@ def portal_transcript_autofill(request):
             "system, or type the other grades in." if merged["other_scale"] else ""])),
         "one_year": not merged["prev"],
     })
+
+
+def edit_lock_until(student):
+    """A week after the student last reopened their profile (None if they never did)."""
+    from datetime import datetime, timedelta
+
+    reopens = (student.attributes or {}).get("reopens") or []
+    return datetime.fromisoformat(max(reopens)) + timedelta(days=EDIT_EVERY_DAYS) if reopens else None
+
+
+def next_edit_at(student):
+    """When the submitted profile may be reopened: None = now, otherwise that date."""
+    until = edit_lock_until(student)
+    return until if until and until > timezone.now() else None
+
+
+@require_POST
+def portal_reopen(request):
+    """The student reopens their submitted profile to change it, once a week. It goes back to "not submitted" (their
+    matches are hidden) until they submit again; the week counts from now."""
+    student = _student(request)
+    if not student.submitted_at or next_edit_at(student):
+        return redirect("/portal/")
+    student.submitted_at = None
+    student.attributes = {**(student.attributes or {}),
+                          "reopens": ((student.attributes or {}).get("reopens") or []) + [timezone.now().isoformat()]}
+    student.save(update_fields=["submitted_at", "attributes", "updated_at"])
+    return redirect("/portal/?reopened=1")
 
 
 @require_POST
